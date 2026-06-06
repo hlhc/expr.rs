@@ -238,7 +238,7 @@ macro_rules! value {
 
     ({ $($tt:tt)+ }) => {
         $crate::Value::Map({
-            let mut map: $crate::__private::IndexMap<String, $crate::Value> = $crate::__private::IndexMap::new();
+            let mut map: $crate::__private::IndexMap<$crate::MapKey, $crate::Value> = $crate::__private::IndexMap::new();
             $crate::value!(@map map () ($($tt)+) ($($tt)+));
             map
         })
@@ -312,11 +312,7 @@ mod tests {
         let simple_array = value!([1, 2, 3]);
         assert_eq!(
             simple_array,
-            Value::Array(vec![
-                Value::Number(1),
-                Value::Number(2),
-                Value::Number(3),
-            ])
+            Value::Array(vec![Value::Number(1), Value::Number(2), Value::Number(3),])
         );
 
         let mixed_array = value!([true, "hello", nil, 42.5]);
@@ -352,10 +348,8 @@ mod tests {
             "key1": "value1",
             "key2": 42,
         });
-        let expected_simple_map = Value::from_iter([
-            ("key1", Value::from("value1")),
-            ("key2", Value::from(42)),
-        ]);
+        let expected_simple_map =
+            Value::from_iter([("key1", Value::from("value1")), ("key2", Value::from(42))]);
         assert_eq!(simple_map, expected_simple_map);
 
         let complex_map = value!({
@@ -373,14 +367,14 @@ mod tests {
             ("string", Value::String("hello".to_string())),
             ("nil", Value::Nil),
             ("number", Value::Float(3.14)),
-            ("array", Value::from(vec![
-                Value::Number(1),
-                Value::Number(2),
-                Value::Number(3),
-            ])),
-            ("nested_map", Value::from_iter([
-                ("inner_key", Value::String("inner_value".to_string()))
-            ])),
+            (
+                "array",
+                Value::from(vec![Value::Number(1), Value::Number(2), Value::Number(3)]),
+            ),
+            (
+                "nested_map",
+                Value::from_iter([("inner_key", Value::String("inner_value".to_string()))]),
+            ),
         ]);
         assert_eq!(complex_map, expected_complex_map);
     }
@@ -393,9 +387,8 @@ mod tests {
         let float_var = 3.14;
         let nil_var = Value::Nil;
         let array_var = vec![1, 2, 3];
-        let map_var: IndexMap<String, Value> = IndexMap::from([
-            ("key".to_string(), Value::String("value".to_string())),
-        ]);
+        let map_var: IndexMap<String, Value> =
+            IndexMap::from([("key".to_string(), Value::String("value".to_string()))]);
 
         let interpolated_value = value!({
             "bool": bool_var,
@@ -412,14 +405,11 @@ mod tests {
             ("int", Value::from(42)),
             ("float", Value::from(3.14)),
             ("nil", Value::Nil),
-            ("array", Value::from(vec![
-                Value::from(1),
-                Value::from(2),
-                Value::from(3),
-            ])),
-            ("map", Value::from_iter([
-                ("key", Value::from("value")),
-            ])),
+            (
+                "array",
+                Value::from(vec![Value::from(1), Value::from(2), Value::from(3)]),
+            ),
+            ("map", Value::from_iter([("key", Value::from("value"))])),
         ]);
         assert_eq!(interpolated_value, expected_value);
     }

@@ -24,8 +24,8 @@
 //! ```
 mod ast;
 mod context;
-mod eval;
 mod error;
+mod eval;
 mod functions;
 mod optimizers;
 mod parser;
@@ -37,18 +37,18 @@ mod serde;
 mod test;
 mod value;
 
-pub use crate::context::Context;
-pub use crate::error::{Error, Result};
-pub use crate::eval::{Environment, run, eval};
-pub use crate::parser::compile;
-pub use crate::parser::compile_opts;
-#[allow(deprecated)]
-pub use crate::parser::Parser;
 pub use crate::ast::node::Node;
 pub use crate::ast::program::Program;
-pub use crate::value::Value;
+pub use crate::context::Context;
+pub use crate::error::{Error, Result};
+pub use crate::eval::{CompileOpts, Environment, eval, run};
+#[allow(deprecated)]
+pub use crate::parser::Parser;
+#[allow(deprecated)]
+pub use crate::parser::compile;
 #[cfg(feature = "serde")]
 pub use crate::serde::{from_value, to_value};
+pub use crate::value::{FloatKey, MapKey, Value};
 
 use pest_derive::Parser as PestParser;
 

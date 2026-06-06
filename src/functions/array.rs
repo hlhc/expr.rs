@@ -1,5 +1,26 @@
+use crate::functions::FunctionMetadata;
+use crate::{Environment, MapKey, Value, bail};
 use indexmap::IndexMap;
-use crate::{bail, Environment, Value};
+
+fn const_first(args: &[Value]) -> Option<Value> {
+    if args.len() != 1 {
+        return None;
+    }
+    match &args[0] {
+        Value::Array(a) => Some(a.first().cloned().unwrap_or(Value::Nil)),
+        _ => None,
+    }
+}
+
+fn const_last(args: &[Value]) -> Option<Value> {
+    if args.len() != 1 {
+        return None;
+    }
+    match &args[0] {
+        Value::Array(a) => Some(a.last().cloned().unwrap_or(Value::Nil)),
+        _ => None,
+    }
+}
 
 pub fn add_array_functions(env: &mut Environment) {
     env.add_function("all", |c| {
@@ -205,13 +226,12 @@ pub fn add_array_functions(env: &mut Environment) {
             for value in a {
                 let mut ctx = c.ctx.clone();
                 ctx.insert("#".to_string(), value.clone());
-                if let Some(key) = c.env.run(predicate.clone(), &ctx)?.as_string() {
-                    groups.entry(key.to_string()).or_insert_with(Vec::new).push(value.clone());
-                } else {
-                    bail!("groupBy() predicate must return a string");
-                }
+                let key_result = c.env.run(predicate.clone(), &ctx)?;
+                let key = MapKey::try_from(key_result)
+                    .map_err(|e| crate::Error::ExprError(format!("groupBy() {e}")))?;
+                groups.entry(key).or_insert_with(Vec::new).push(value.clone());
             }
-            Ok(Value::Map(groups.into_iter().map(|(k, group)| (k, group.into())).collect()))
+            Ok(Value::Map(groups.into_iter().map(|(k, group): (MapKey, Vec<Value>)| (k, Value::Array(group))).collect()))
         } else {
             bail!("groupBy() takes an array as the first argument and a predicate as the second argument");
         }
@@ -380,23 +400,31 @@ pub fn add_array_functions(env: &mut Environment) {
         Ok(acc)
     });
 
-    env.add_function("first", |c| {
-        if c.args.len() != 1 {
-            bail!("first() takes exactly one argument");
-        }
-        match &c.args[0] {
-            Value::Array(a) => Ok(a.first().cloned().unwrap_or(Value::Nil)),
-            _ => bail!("first() takes an array as the argument"),
-        }
-    });
+    env.add_builtin_function(
+        "first",
+        |c| {
+            let args = c.args.as_slice();
+            if let Some(result) = const_first(args) {
+                return Ok(result);
+            }
+            bail!("first() takes an array as the argument")
+        },
+        FunctionMetadata {
+            const_eval: Some(const_first),
+        },
+    );
 
-    env.add_function("last", |c| {
-        if c.args.len() != 1 {
-            bail!("last() takes exactly one argument");
-        }
-        match &c.args[0] {
-            Value::Array(a) => Ok(a.last().cloned().unwrap_or(Value::Nil)),
-            _ => bail!("last() takes an array as the argument"),
-        }
-    });
+    env.add_builtin_function(
+        "last",
+        |c| {
+            let args = c.args.as_slice();
+            if let Some(result) = const_last(args) {
+                return Ok(result);
+            }
+            bail!("last() takes an array as the argument")
+        },
+        FunctionMetadata {
+            const_eval: Some(const_last),
+        },
+    );
 }

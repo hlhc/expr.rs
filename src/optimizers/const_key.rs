@@ -1,20 +1,16 @@
 use crate::ast::node::Node;
 use crate::ast::postfix_operator::PostfixOperator;
-use crate::Value;
+use crate::{MapKey, Value};
 
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Postfix {
-        operator:
-            PostfixOperator::Index {
-                idx,
-                optional: _,
-            },
+        operator: PostfixOperator::Index { idx, optional: _ },
         node: container,
     } = node
     {
         match container.as_ref() {
             Node::Value(Value::Map(map)) => {
-                let key = index_key_to_string(idx.as_ref());
+                let key = index_key_to_map_key(idx.as_ref());
                 if let Some(k) = key {
                     *node = Node::Value(map.get(&k).cloned().unwrap_or(Value::Nil));
                     return true;
@@ -61,33 +57,49 @@ fn idx_to_usize(i: i64, len: usize) -> usize {
     }
 }
 
-fn index_key_to_string(idx: &Node) -> Option<String> {
+fn index_key_to_map_key(idx: &Node) -> Option<MapKey> {
     match idx {
-        Node::Value(Value::String(s)) => Some(s.clone()),
-        Node::Ident(id) => Some(id.clone()),
+        Node::Value(Value::String(s)) => Some(MapKey::String(s.clone())),
+        Node::Value(Value::Number(n)) => Some(MapKey::Number(*n)),
+        Node::Ident(id) => Some(MapKey::String(id.clone())),
         _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result, Value};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::postfix_operator::PostfixOperator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, Value, eval};
 
     #[test]
     fn map_key_lookup() -> Result<()> {
-        assert_eq!(eval(r#"{foo: "bar"}.foo"#, &Context::default())?.to_string(), r#""bar""#);
-        assert_eq!(eval(r#"{foo: "bar"}["foo"]"#, &Context::default())?.to_string(), r#""bar""#);
+        assert_eq!(
+            eval(r#"{foo: "bar"}.foo"#, &Context::default())?.to_string(),
+            r#""bar""#
+        );
+        assert_eq!(
+            eval(r#"{foo: "bar"}["foo"]"#, &Context::default())?.to_string(),
+            r#""bar""#
+        );
         Ok(())
     }
 
     #[test]
     fn array_index_lookup() -> Result<()> {
-        assert_eq!(eval(r#"["a", "b", "c"][0]"#, &Context::default())?.to_string(), r#""a""#);
-        assert_eq!(eval(r#"["a", "b", "c"][1]"#, &Context::default())?.to_string(), r#""b""#);
-        assert_eq!(eval(r#"["a", "b", "c"][-1]"#, &Context::default())?.to_string(), r#""c""#);
+        assert_eq!(
+            eval(r#"["a", "b", "c"][0]"#, &Context::default())?.to_string(),
+            r#""a""#
+        );
+        assert_eq!(
+            eval(r#"["a", "b", "c"][1]"#, &Context::default())?.to_string(),
+            r#""b""#
+        );
+        assert_eq!(
+            eval(r#"["a", "b", "c"][-1]"#, &Context::default())?.to_string(),
+            r#""c""#
+        );
         Ok(())
     }
 

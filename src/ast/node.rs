@@ -1,13 +1,13 @@
-use indexmap::IndexMap;
-use std::collections::HashSet;
 use crate::ast::operator::Operator;
 use crate::ast::postfix_operator::PostfixOperator;
+use crate::ast::program::Program;
 use crate::ast::unary_operator::UnaryOperator;
 use crate::pratt::PRATT_PARSER;
-use crate::{Rule, Value};
+use crate::{MapKey, Rule, Value};
+use indexmap::IndexMap;
 use log::trace;
 use pest::iterators::{Pair, Pairs};
-use crate::ast::program::Program;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
@@ -66,9 +66,21 @@ impl Node {
     fn accepts_predicate(name: &str) -> bool {
         matches!(
             name,
-            "all" | "any" | "one" | "none" | "map" | "filter" | "find"
-                | "findIndex" | "findLast" | "findLastIndex"
-                | "count" | "sum" | "reduce" | "groupBy" | "sortBy"
+            "all"
+                | "any"
+                | "one"
+                | "none"
+                | "map"
+                | "filter"
+                | "find"
+                | "findIndex"
+                | "findLast"
+                | "findLastIndex"
+                | "count"
+                | "sum"
+                | "reduce"
+                | "groupBy"
+                | "sortBy"
         )
     }
 
@@ -172,6 +184,20 @@ impl Node {
             }
         }
     }
+
+    /// If this node is a pure literal (Value, Array of literals, Map),
+    /// return the corresponding `Value`. Returns `None` for nodes that
+    /// require evaluation (Idents, Ranges, Funcs, Operations, etc.).
+    pub fn literal_value(&self) -> Option<Value> {
+        match self {
+            Node::Value(v) => Some(v.clone()),
+            Node::Array(items) => {
+                let vals: Option<Vec<Value>> = items.iter().map(|i| i.literal_value()).collect();
+                vals.map(Value::Array)
+            }
+            _ => None,
+        }
+    }
 }
 
 fn operator_children_count(op: &PostfixOperator) -> usize {
@@ -224,12 +250,12 @@ impl From<Pair<'_, Rule>> for Node {
                 let mut args: Vec<Node> = Vec::new();
                 for arg in inner {
                     match arg.as_rule() {
-                        Rule::predicate => {
+                        Rule::predicate | Rule::braced_predicate => {
                             predicate = Some(Box::new(arg.into_inner().into()));
-                        },
+                        }
                         _ => {
                             args.push(arg.into());
-                        },
+                        }
                     }
                 }
                 // If no explicit predicate was parsed but the last arg references `#`,
@@ -249,8 +275,15 @@ impl From<Pair<'_, Rule>> for Node {
                         expr: last,
                     }));
                 }
-                Node::Func { ident, args, predicate, threshold: None, throws: false, map_node: None }
-            },
+                Node::Func {
+                    ident,
+                    args,
+                    predicate,
+                    threshold: None,
+                    throws: false,
+                    map_node: None,
+                }
+            }
             Rule::array => Node::Array(pair.into_inner().map(|p| p.into()).collect()),
             Rule::map => {
                 let mut map = IndexMap::new();
@@ -260,7 +293,7 @@ impl From<Pair<'_, Rule>> for Node {
                     .step_by(2)
                     .zip(vals.into_inner().skip(1).step_by(2))
                 {
-                    let key = key.as_str().to_string();
+                    let key = MapKey::String(key.as_str().to_string());
                     map.insert(key, val.into_inner().into());
                 }
                 Node::Value(Value::Map(map))

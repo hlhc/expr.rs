@@ -1,10 +1,10 @@
-use crate::ast::node::Node;
 use crate::Value::{Array, Bool, Float, Map, Number, String};
-use crate::{bail, Result, Rule};
+use crate::ast::node::Node;
 use crate::{Context, Environment, Value};
-use pest::iterators::{Pair};
-use std::str::FromStr;
+use crate::{MapKey, Result, Rule, bail};
 use log::trace;
+use pest::iterators::Pair;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, strum::EnumString, strum::Display)]
 pub enum Operator {
@@ -145,15 +145,21 @@ impl Environment<'_> {
                         _ => bail!("Invalid operands for operator {operator}"),
                     },
                     Operator::In => match (left, right) {
-                        (String(left), Map(right)) => right.contains_key(&left).into(),
-                        (Number(left), Map(right)) => right.contains_key(&left.to_string()).into(),
+                        (String(left), Map(right)) => {
+                            right.contains_key(&MapKey::String(left.clone())).into()
+                        }
+                        (Number(left), Map(right)) => {
+                            right.contains_key(&MapKey::Number(left)).into()
+                        }
                         (left, Array(right)) => right.contains(&left).into(),
                         _ => bail!("Invalid operands for operator {operator}"),
                     },
                     Operator::Contains => match (left, right) {
                         (String(left), String(right)) => left.contains(&right).into(),
                         (Array(left), right) => left.contains(&right).into(),
-                        (Map(left), String(right)) => left.contains_key(&right).into(),
+                        (Map(left), String(right)) => {
+                            left.contains_key(&MapKey::String(right)).into()
+                        }
                         _ => bail!("Invalid operands for operator contains"),
                     },
                     Operator::StartsWith => match (left, right) {

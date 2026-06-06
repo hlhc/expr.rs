@@ -1,7 +1,7 @@
 use crate::ast::node::Node;
 use crate::ast::operator::Operator;
 use crate::ast::unary_operator::UnaryOperator;
-use crate::Value;
+use crate::{MapKey, Value};
 
 pub fn optimize(node: &mut Node) -> bool {
     let mut changed = false;
@@ -15,7 +15,9 @@ pub fn optimize(node: &mut Node) -> bool {
 fn try_constant_fold(node: &mut Node) -> bool {
     match node {
         Node::Operation {
-            operator, left, right,
+            operator,
+            left,
+            right,
         } => {
             if let (Node::Value(l), Node::Value(r)) = (left.as_ref(), right.as_ref())
                 && let Some(result) = fold_binary_op(operator, l.clone(), r.clone())
@@ -24,7 +26,10 @@ fn try_constant_fold(node: &mut Node) -> bool {
                 return true;
             }
         }
-        Node::Unary { operator, node: inner } => {
+        Node::Unary {
+            operator,
+            node: inner,
+        } => {
             if let Node::Value(v) = inner.as_ref()
                 && let Some(result) = fold_unary_op(operator, v.clone())
             {
@@ -78,9 +83,7 @@ fn fold_binary_op(op: &Operator, left: Value, right: Value) -> Option<Value> {
         Operator::GreaterThanOrEqual => {
             compare(&left, &right).map(|o| Bool(o != std::cmp::Ordering::Less))
         }
-        Operator::LessThan => {
-            compare(&left, &right).map(|o| Bool(o == std::cmp::Ordering::Less))
-        }
+        Operator::LessThan => compare(&left, &right).map(|o| Bool(o == std::cmp::Ordering::Less)),
         Operator::LessThanOrEqual => {
             compare(&left, &right).map(|o| Bool(o != std::cmp::Ordering::Greater))
         }
@@ -91,16 +94,15 @@ fn fold_binary_op(op: &Operator, left: Value, right: Value) -> Option<Value> {
             left.as_bool() == Some(true) || right.as_bool() == Some(true),
         )),
         Operator::In => match (&left, &right) {
-            (String(s), Map(m)) => Some(Bool(m.contains_key(s.as_str()))),
+            (String(s), Map(m)) => Some(Bool(m.contains_key(&MapKey::String(s.clone())))),
+            (Number(n), Map(m)) => Some(Bool(m.contains_key(&MapKey::Number(*n)))),
             (item, Array(arr)) => Some(Bool(arr.contains(item))),
             _ => None,
         },
         Operator::Contains => match (&left, &right) {
-            (String(haystack), String(needle)) => {
-                Some(Bool(haystack.contains(needle.as_str())))
-            }
+            (String(haystack), String(needle)) => Some(Bool(haystack.contains(needle.as_str()))),
             (Array(arr), item) => Some(Bool(arr.contains(item))),
-            (Map(m), String(key)) => Some(Bool(m.contains_key(key.as_str()))),
+            (Map(m), String(key)) => Some(Bool(m.contains_key(&MapKey::String(key.clone())))),
             _ => None,
         },
         Operator::StartsWith => match (&left, &right) {
@@ -177,22 +179,22 @@ fn try_boolean_minimization(node: &mut Node) -> bool {
             _ => {}
         },
         Node::Operation {
-            operator, left, right,
+            operator,
+            left,
+            right,
         } => match operator {
-            Operator::And => match (left.as_ref(), right.as_ref()) {
-                (Node::Value(Value::Bool(false)), _) => {
+            Operator::And => {
+                if let (Node::Value(Value::Bool(false)), _) = (left.as_ref(), right.as_ref()) {
                     *node = Node::Value(Value::Bool(false));
                     return true;
                 }
-                _ => {}
-            },
-            Operator::Or => match (left.as_ref(), right.as_ref()) {
-                (Node::Value(Value::Bool(true)), _) => {
+            }
+            Operator::Or => {
+                if let (Node::Value(Value::Bool(true)), _) = (left.as_ref(), right.as_ref()) {
                     *node = Node::Value(Value::Bool(true));
                     return true;
                 }
-                _ => {}
-            },
+            }
             _ => {}
         },
         _ => {}
@@ -202,11 +204,11 @@ fn try_boolean_minimization(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{bool_val, check_both_error, num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
     use crate::ast::unary_operator::UnaryOperator;
-    use super::super::test_helpers::{num, bool_val, optimize_node, check_both_error};
+    use crate::{Context, Result, eval};
 
     // ---- Constant Folding (E2E) ----
 
@@ -231,11 +233,26 @@ mod tests {
 
     #[test]
     fn fold_string_ops() -> Result<()> {
-        assert_eq!(eval(r#""foo" + "bar""#, &Context::default())?.to_string(), r#""foobar""#);
-        assert_eq!(eval(r#""foo" contains "o""#, &Context::default())?.to_string(), "true");
-        assert_eq!(eval(r#""foo" startsWith "f""#, &Context::default())?.to_string(), "true");
-        assert_eq!(eval(r#""foo" endsWith "o""#, &Context::default())?.to_string(), "true");
-        assert_eq!(eval(r#""foo" matches "^f""#, &Context::default())?.to_string(), "true");
+        assert_eq!(
+            eval(r#""foo" + "bar""#, &Context::default())?.to_string(),
+            r#""foobar""#
+        );
+        assert_eq!(
+            eval(r#""foo" contains "o""#, &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval(r#""foo" startsWith "f""#, &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval(r#""foo" endsWith "o""#, &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval(r#""foo" matches "^f""#, &Context::default())?.to_string(),
+            "true"
+        );
         Ok(())
     }
 
@@ -252,10 +269,22 @@ mod tests {
 
     #[test]
     fn fold_in_contains() -> Result<()> {
-        assert_eq!(eval(r#"1 in [1, 2, 3]"#, &Context::default())?.to_string(), "true");
-        assert_eq!(eval(r#"4 in [1, 2, 3]"#, &Context::default())?.to_string(), "false");
-        assert_eq!(eval(r#""x" in {x: 1}"#, &Context::default())?.to_string(), "true");
-        assert_eq!(eval(r#"["a", "b"] contains "a""#, &Context::default())?.to_string(), "true");
+        assert_eq!(
+            eval(r#"1 in [1, 2, 3]"#, &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval(r#"4 in [1, 2, 3]"#, &Context::default())?.to_string(),
+            "false"
+        );
+        assert_eq!(
+            eval(r#""x" in {x: 1}"#, &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval(r#"["a", "b"] contains "a""#, &Context::default())?.to_string(),
+            "true"
+        );
         Ok(())
     }
 
@@ -279,26 +308,56 @@ mod tests {
 
     #[test]
     fn boolean_short_circuit_and() -> Result<()> {
-        assert_eq!(eval("true && true", &Context::default())?.to_string(), "true");
-        assert_eq!(eval("true && false", &Context::default())?.to_string(), "false");
-        assert_eq!(eval("false && true", &Context::default())?.to_string(), "false");
-        assert_eq!(eval("false && false", &Context::default())?.to_string(), "false");
+        assert_eq!(
+            eval("true && true", &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval("true && false", &Context::default())?.to_string(),
+            "false"
+        );
+        assert_eq!(
+            eval("false && true", &Context::default())?.to_string(),
+            "false"
+        );
+        assert_eq!(
+            eval("false && false", &Context::default())?.to_string(),
+            "false"
+        );
         Ok(())
     }
 
     #[test]
     fn boolean_short_circuit_or() -> Result<()> {
-        assert_eq!(eval("true || true", &Context::default())?.to_string(), "true");
-        assert_eq!(eval("true || false", &Context::default())?.to_string(), "true");
-        assert_eq!(eval("false || true", &Context::default())?.to_string(), "true");
-        assert_eq!(eval("false || false", &Context::default())?.to_string(), "false");
+        assert_eq!(
+            eval("true || true", &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval("true || false", &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval("false || true", &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval("false || false", &Context::default())?.to_string(),
+            "false"
+        );
         Ok(())
     }
 
     #[test]
     fn boolean_double_negation_e2e() -> Result<()> {
-        assert_eq!(eval("not (not true)", &Context::default())?.to_string(), "true");
-        assert_eq!(eval("not (not false)", &Context::default())?.to_string(), "false");
+        assert_eq!(
+            eval("not (not true)", &Context::default())?.to_string(),
+            "true"
+        );
+        assert_eq!(
+            eval("not (not false)", &Context::default())?.to_string(),
+            "false"
+        );
         Ok(())
     }
 
@@ -406,7 +465,10 @@ mod tests {
         };
         let original = n.clone();
         optimize_node(&mut n);
-        assert_eq!(n, original, "x * 1 must not be simplified - type-unsafe for non-numeric x");
+        assert_eq!(
+            n, original,
+            "x * 1 must not be simplified - type-unsafe for non-numeric x"
+        );
     }
 
     #[test]
@@ -418,7 +480,10 @@ mod tests {
         };
         let original = n.clone();
         optimize_node(&mut n);
-        assert_eq!(n, original, "x + 0 must not be simplified - type-unsafe for non-numeric x");
+        assert_eq!(
+            n, original,
+            "x + 0 must not be simplified - type-unsafe for non-numeric x"
+        );
     }
 
     #[test]
@@ -432,7 +497,10 @@ mod tests {
         };
         let original = n.clone();
         optimize_node(&mut n);
-        assert_eq!(n, original, "!!x must not be simplified - type-unsafe for non-Bool x");
+        assert_eq!(
+            n, original,
+            "!!x must not be simplified - type-unsafe for non-Bool x"
+        );
     }
 
     #[test]

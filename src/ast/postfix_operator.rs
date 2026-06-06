@@ -1,11 +1,12 @@
-use std::collections::HashSet;
-use std::iter::once;
-use crate::ast::node::Node;
 use crate::Rule;
-use crate::{bail, Result};
+use crate::ast::node::Node;
+use crate::functions::FuncArgs;
 use crate::{Context, Environment, Value};
+use crate::{MapKey, Result, bail};
 use log::trace;
 use pest::iterators::Pair;
+use std::collections::HashSet;
+use std::iter::once;
 
 #[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum PostfixOperator {
@@ -107,11 +108,12 @@ impl Environment<'_> {
                         let idx = i64_to_idx(idx, arr.len());
                         arr.get(idx).cloned().unwrap_or(Value::Nil)
                     }
+                    Value::Map(map) => map.get(&MapKey::Number(idx)).cloned().unwrap_or(Value::Nil),
                     _ if optional => Value::Nil,
                     _ => bail!("Invalid operand for operator []"),
                 },
                 Value::String(key) => match value {
-                    Value::Map(map) => map.get(&key).cloned().unwrap_or(Value::Nil),
+                    Value::Map(map) => map.get(&MapKey::String(key)).cloned().unwrap_or(Value::Nil),
                     _ if optional => Value::Nil,
                     _ => bail!("Invalid operand for operator []"),
                 },
@@ -145,11 +147,22 @@ impl Environment<'_> {
                     map_node,
                 } = *func
                 {
-                    let args = args.into_iter()
+                    let args = args
+                        .into_iter()
                         .map(|arg| self.eval_expr(ctx, arg))
                         .chain(once(Ok(value)))
                         .collect::<Result<Vec<Value>>>()?;
-                    self.eval_func(ctx, ident, args, predicate.map(|p| *p), threshold, throws, map_node)?
+                    self.eval_func(
+                        ctx,
+                        FuncArgs {
+                            ident,
+                            args,
+                            predicate: predicate.map(|p| *p),
+                            threshold,
+                            throws,
+                            map_node,
+                        },
+                    )?
                 } else {
                     bail!("Invalid operand for operator |");
                 }

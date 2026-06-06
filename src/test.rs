@@ -1,8 +1,8 @@
-use crate::{Context, Value};
-use crate::{Environment, eval};
 #[allow(deprecated)]
 use crate::Parser;
 use crate::Result;
+use crate::{Context, Value};
+use crate::{Environment, eval};
 use proptest::prelude::*;
 use test_log::test;
 
@@ -106,9 +106,13 @@ bar`"#,
 
 test!(nil, "nil", "nil");
 test!(comment_line, "1 // foo", "1");
-test!(comment_block, r#"/*
+test!(
+    comment_block,
+    r#"/*
 foo
-*/ 1"#, "1");
+*/ 1"#,
+    "1"
+);
 
 #[test]
 fn logic() -> Result<()> {
@@ -161,19 +165,12 @@ fn map() -> Result<()> {
 fn context() -> Result<()> {
     let ctx = Context::from_iter([("Version".to_string(), "v1.0.0".to_string())]);
     assert_eq!(
-        eval(r#"Version matches "^v\\d+\\.\\d+\\.\\d+""#, &ctx)?
-            .to_string(),
+        eval(r#"Version matches "^v\\d+\\.\\d+\\.\\d+""#, &ctx)?.to_string(),
         "true"
     );
     assert_eq!(eval(r#""Version" in $env"#, &ctx)?.to_string(), r#"true"#);
-    assert_eq!(
-        eval(r#""version" in $env"#, &ctx)?.to_string(),
-        r#"false"#
-    );
-    assert_eq!(
-        eval(r#"$env["Version"]"#, &ctx)?.to_string(),
-        r#""v1.0.0""#
-    );
+    assert_eq!(eval(r#""version" in $env"#, &ctx)?.to_string(), r#"false"#);
+    assert_eq!(eval(r#"$env["Version"]"#, &ctx)?.to_string(), r#""v1.0.0""#);
     Ok(())
 }
 
@@ -270,8 +267,15 @@ fn array_functions() -> Result<()> {
     test_old!(r#"findIndex([1, 2, 3], {# % 2 == 0})"#, "1");
     test_old!(r#"findLast([1, 2, 3], {# % 2 == 1})"#, "3");
     test_old!(r#"findLastIndex([1, 2, 3], {# % 2 == 1})"#, "2");
-    test_old!(r#"[{type: 'foo', v: 1}, {type: 'foo', v: 2}, {type: 'bar', v: 3}]"#, r#"[{{type: "foo", v: 1}}, {{type: "foo", v: 2}}, {{type: "bar", v: 3}}]"#);
-    test_old!(r#"groupBy([{type: 'foo', v: 1}, {type: 'foo', v: 2}, {type: 'bar', v: 3}], .type).foo"#, r#"[{{type: "foo", v: 1}}, {{type: "foo", v: 2}}]"#);
+    test_old!(
+        r#"[{type: 'foo', v: 1}, {type: 'foo', v: 2}, {type: 'bar', v: 3}]"#,
+        r#"[{{type: "foo", v: 1}}, {{type: "foo", v: 2}}, {{type: "bar", v: 3}}]"#
+    );
+    test_old!(
+        r#"groupBy([{type: 'foo', v: 1}, {type: 'foo', v: 2}, {type: 'bar', v: 3}], .type).foo"#,
+        r#"[{{type: "foo", v: 1}}, {{type: "foo", v: 2}}]"#
+    );
+    test_old!(r#"groupBy([1, 2, 3, 4, 5, 6], {# % 2})[0][0]"#, "2");
     Ok(())
 }
 
@@ -312,7 +316,10 @@ fn filter() -> Result<()> {
     test_old!("[1, 2, 3, 4, 5] | filter(# > 2)", "[3, 4, 5]");
     test_old!("[1, 2, 3] | map(# * 10)", "[10, 20, 30]");
     // Nested func with # inside braced predicate should not be affected
-    test_old!("filter([\"ab\", \"cde\", \"f\"], {len(#) > 1})", r#"["ab", "cde"]"#);
+    test_old!(
+        "filter([\"ab\", \"cde\", \"f\"], {len(#) > 1})",
+        r#"["ab", "cde"]"#
+    );
     // Bound # in nested predicate should not trigger outer promotion
     test_old!("map([1, 2, 3], {any(0..9, {# > 0})})", "[true, true, true]");
     Ok(())
@@ -333,19 +340,29 @@ fn version_expressions() -> Result<()> {
     });
 
     assert_eq!(
-        env.eval(r#"Version in ["latest", "stable"]"#, &ctx)?.to_string(),
+        env.eval(r#"Version in ["latest", "stable"]"#, &ctx)?
+            .to_string(),
         "false"
     );
     assert_eq!(
-        env.eval(r#"not (Version in ["latest", "stable"])"#, &ctx)?.to_string(),
+        env.eval(r#"not (Version in ["latest", "stable"])"#, &ctx)?
+            .to_string(),
         "true"
     );
     assert_eq!(
-        env.eval(r#"(not (Version in ["latest", "stable"])) and semver("> 0.4.5")"#, &ctx)?.to_string(),
+        env.eval(
+            r#"(not (Version in ["latest", "stable"])) and semver("> 0.4.5")"#,
+            &ctx
+        )?
+        .to_string(),
         "true"
     );
     assert_eq!(
-        env.eval(r#"(not (Version in ["latest", "stable"])) && semver("> 0.4.5")"#, &ctx)?.to_string(),
+        env.eval(
+            r#"(not (Version in ["latest", "stable"])) && semver("> 0.4.5")"#,
+            &ctx
+        )?
+        .to_string(),
         "true"
     );
 
@@ -379,11 +396,7 @@ test!(
     "true"
 );
 
-test!(
-    precedence_not_vs_and,
-    "not true and true",
-    "false"
-);
+test!(precedence_not_vs_and, "not true and true", "false");
 
 test!(precedence_ternary_is_lowest, "5 > 10 ? 1 + 1 : 2 * 2", "4");
 test!(
@@ -443,8 +456,16 @@ test!(
 );
 
 // fromJSON tests
-test!(from_json_object, r#"fromJSON("{\"foo\": \"bar\"}")"#, "{{foo: \"bar\"}}");
-test!(from_json_object_access, r#"fromJSON("{\"foo\": \"bar\"}").foo"#, r#""bar""#);
+test!(
+    from_json_object,
+    r#"fromJSON("{\"foo\": \"bar\"}")"#,
+    "{{foo: \"bar\"}}"
+);
+test!(
+    from_json_object_access,
+    r#"fromJSON("{\"foo\": \"bar\"}").foo"#,
+    r#""bar""#
+);
 test!(from_json_array, r#"fromJSON("[1, 2, 3]")"#, "[1, 2, 3]");
 test!(from_json_number, r#"fromJSON("123")"#, "123");
 test!(from_json_float, r#"fromJSON("1.5")"#, "1.5");
@@ -452,7 +473,11 @@ test!(from_json_true, r#"fromJSON("true")"#, "true");
 test!(from_json_false, r#"fromJSON("false")"#, "false");
 test!(from_json_null, r#"fromJSON("null")"#, "nil");
 test!(from_json_string, r#"fromJSON("\"hello\"")"#, r#""hello""#);
-test!(from_json_nested, r#"fromJSON("{\"a\": {\"b\": 1}}").a.b"#, "1");
+test!(
+    from_json_nested,
+    r#"fromJSON("{\"a\": {\"b\": 1}}").a.b"#,
+    "1"
+);
 test!(from_json_array_access, r#"fromJSON("[1, 2, 3]")[1]"#, "2");
 
 // toJSON tests
@@ -489,15 +514,39 @@ test!(len_map, r#"len({a: 1, b: 2})"#, "2");
 test!(len_map_empty, r#"len({})"#, "0");
 
 // sort tests
-test!(sort_numbers, r#"sort([3, 1, 4, 1, 5, 9, 2, 6])"#, "[1, 1, 2, 3, 4, 5, 6, 9]");
-test!(sort_numbers_desc, r#"sort([3, 1, 4, 1, 5], "desc")"#, "[5, 4, 3, 1, 1]");
-test!(sort_strings, r#"sort(["banana", "apple", "cherry"])"#, r#"["apple", "banana", "cherry"]"#);
-test!(sort_strings_desc, r#"sort(["b", "a", "c"], "desc")"#, r#"["c", "b", "a"]"#);
+test!(
+    sort_numbers,
+    r#"sort([3, 1, 4, 1, 5, 9, 2, 6])"#,
+    "[1, 1, 2, 3, 4, 5, 6, 9]"
+);
+test!(
+    sort_numbers_desc,
+    r#"sort([3, 1, 4, 1, 5], "desc")"#,
+    "[5, 4, 3, 1, 1]"
+);
+test!(
+    sort_strings,
+    r#"sort(["banana", "apple", "cherry"])"#,
+    r#"["apple", "banana", "cherry"]"#
+);
+test!(
+    sort_strings_desc,
+    r#"sort(["b", "a", "c"], "desc")"#,
+    r#"["c", "b", "a"]"#
+);
 test!(sort_empty, r#"sort([])"#, "[]");
 
 // sortBy tests
-test!(sort_by_length, r#"sortBy(["bb", "a", "ccc"], {len(#)})"#, r#"["a", "bb", "ccc"]"#);
-test!(sort_by_length_desc, r#"sortBy(["bb", "a", "ccc"], "desc", {len(#)})"#, r#"["ccc", "bb", "a"]"#);
+test!(
+    sort_by_length,
+    r#"sortBy(["bb", "a", "ccc"], {len(#)})"#,
+    r#"["a", "bb", "ccc"]"#
+);
+test!(
+    sort_by_length_desc,
+    r#"sortBy(["bb", "a", "ccc"], "desc", {len(#)})"#,
+    r#"["ccc", "bb", "a"]"#
+);
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
@@ -518,7 +567,11 @@ test!(runtime_sum, "sum([1, 2, 3, 4, 5])", "15");
 test!(runtime_sum_with_predicate, "sum([1, 2, 3], {# * 2})", "12");
 test!(runtime_sum_float, "sum([1.0, 2.0, 3.0])", "6");
 test!(runtime_reduce, "reduce([1, 2, 3, 4], {# + #acc})", "10");
-test!(runtime_reduce_no_initial, "reduce([1, 2, 3], {# + #acc})", "6");
+test!(
+    runtime_reduce_no_initial,
+    "reduce([1, 2, 3], {# + #acc})",
+    "6"
+);
 test!(runtime_first, "first([1, 2, 3])", "1");
 test!(runtime_first_empty, "first([])", "nil");
 test!(runtime_last, "last([1, 2, 3])", "3");
