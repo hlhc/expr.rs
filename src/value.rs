@@ -453,7 +453,7 @@ impl From<Pair<'_, Rule>> for Value {
     fn from(pair: Pair<Rule>) -> Self {
         trace!("{:?} = {}", &pair.as_rule(), pair.as_str());
         match pair.as_rule() {
-            Rule::value => pair.into_inner().into(),
+            Rule::literal => pair.into_inner().into(),
             Rule::nil => Value::Nil,
             Rule::bool => Value::Bool(pair.as_str().parse().unwrap()),
             Rule::int => Value::Number(pair.as_str().replace('_', "").parse().unwrap()),

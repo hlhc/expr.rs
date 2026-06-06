@@ -92,7 +92,7 @@ impl Node {
             Node::Array(items) => items.iter().all(|i| i.is_constant()),
             Node::Operation { left, right, .. } => left.is_constant() && right.is_constant(),
             Node::Unary { node, .. } => node.is_constant(),
-            Node::Range(_, _) => true, // grammar guarantees value..value
+            Node::Range(start, end) => start.is_constant() && end.is_constant(),
             Node::Postfix { node, operator } => {
                 node.is_constant()
                     && match operator {
@@ -118,7 +118,8 @@ impl Node {
             Node::Postfix { node, operator } => {
                 node.contains_func_call() || operator.contains_func_call()
             }
-            Node::Range(_, _) | Node::Value(_) | Node::Ident(_) => false,
+            Node::Range(start, end) => start.contains_func_call() || end.contains_func_call(),
+            Node::Value(_) | Node::Ident(_) => false,
         }
     }
 
@@ -227,10 +228,16 @@ impl From<Pairs<'_, Rule>> for Node {
                 operator: operator.into(),
                 node: Box::new(left),
             })
-            .map_infix(|left, operator, right| Node::Operation {
-                operator: operator.into(),
-                left: Box::new(left),
-                right: Box::new(right),
+            .map_infix(|left, operator, right| {
+                if operator.as_rule() == Rule::range_op {
+                    Node::Range(Box::new(left), Box::new(right))
+                } else {
+                    Node::Operation {
+                        operator: operator.into(),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    }
+                }
             })
             .parse(pairs)
     }
@@ -241,9 +248,10 @@ impl From<Pair<'_, Rule>> for Node {
         trace!("{:?} = {}", &pair.as_rule(), pair.as_str());
         match pair.as_rule() {
             Rule::expr => pair.into_inner().into(),
-            Rule::value => Node::Value(pair.into_inner().into()),
+            Rule::literal => Node::Value(pair.into_inner().into()),
+            Rule::group => pair.into_inner().into(),
             Rule::ident => Node::Ident(pair.as_str().to_string()),
-            Rule::func => {
+            Rule::call => {
                 let mut inner = pair.into_inner();
                 let ident = inner.next().unwrap().as_str().to_string();
                 let mut predicate = None;
@@ -297,12 +305,6 @@ impl From<Pair<'_, Rule>> for Node {
                     map.insert(key, val.into_inner().into());
                 }
                 Node::Value(Value::Map(map))
-            }
-            Rule::range => {
-                let mut inner = pair.into_inner();
-                let start = Box::new(inner.next().unwrap().into());
-                let end = Box::new(inner.next().unwrap().into());
-                Node::Range(start, end)
             }
             rule => unreachable!("Unexpected rule: {rule:?}"),
         }

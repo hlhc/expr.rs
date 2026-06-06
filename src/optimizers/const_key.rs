@@ -36,6 +36,7 @@ pub fn optimize(node: &mut Node) -> bool {
                 if let (Node::Value(Value::Number(s)), Node::Value(Value::Number(e))) =
                     (start.as_ref(), end.as_ref())
                     && let Node::Value(Value::Number(i)) = idx.as_ref()
+                    && e >= s
                 {
                     let length = (e - s + 1) as usize;
                     let pos = idx_to_usize(*i, length);
@@ -109,6 +110,7 @@ mod tests {
         assert_eq!(eval("(3..5)[1]", &Context::default())?.to_string(), "4");
         assert_eq!(eval("(3..5)[2]", &Context::default())?.to_string(), "5");
         assert_eq!(eval("(3..5)[-1]", &Context::default())?.to_string(), "5");
+        assert_eq!(eval("(4..0)[0]", &Context::default())?.to_string(), "nil");
         Ok(())
     }
 

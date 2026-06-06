@@ -61,33 +61,33 @@ impl From<Pair<'_, Rule>> for PostfixOperator {
     fn from(pair: Pair<Rule>) -> Self {
         trace!("{:?}={}", pair.as_rule(), pair.as_str());
         match pair.as_rule() {
-            Rule::index_op | Rule::membership_op => PostfixOperator::Index {
+            Rule::index_op | Rule::member_op => PostfixOperator::Index {
                 idx: Box::new(pair.into_inner().into()),
                 optional: false,
             },
-            Rule::opt_index_op | Rule::opt_membership_op => PostfixOperator::Index {
+            Rule::optional_index_op | Rule::optional_member_op => PostfixOperator::Index {
                 idx: Box::new(pair.into_inner().into()),
                 optional: true,
             },
-            Rule::range_start_op => {
+            Rule::slice_from_op => {
                 let mut inner = pair.into_inner();
                 let start = inner.next().map(|p| p.as_str().parse().unwrap());
                 let end = inner.next().map(|p| p.as_str().parse().unwrap());
                 PostfixOperator::Range(start, end)
             }
-            Rule::range_end_op => {
+            Rule::slice_to_op => {
                 let mut inner = pair.into_inner();
                 let end = inner.next().map(|p| p.as_str().parse().unwrap());
                 PostfixOperator::Range(None, end)
             }
             Rule::default_op => PostfixOperator::Default(Box::new(pair.into_inner().into())),
-            Rule::ternary => {
+            Rule::ternary_op => {
                 let mut inner = pair.into_inner();
                 let left = Box::new(inner.next().unwrap().into());
                 let right = Box::new(inner.next().unwrap().into());
                 PostfixOperator::Ternary { left, right }
             }
-            Rule::pipe => PostfixOperator::Pipe(Box::new(pair.into_inner().into())),
+            Rule::pipe_op => PostfixOperator::Pipe(Box::new(pair.into_inner().into())),
             rule => unreachable!("Unexpected rule: {rule:?}"),
         }
     }

@@ -1,41 +1,44 @@
 full    = _{ SOI ~ program ~ EOI }
 program =  { stmt* ~ expr }
 stmt    =  { "let" ~ ident ~ "=" ~ expr ~ ";" }
-expr    =  { prefix? ~ term ~ postfix* ~ (infix ~ prefix? ~ term ~ postfix*)* }
+expr    =  { prefix? ~ primary ~ postfix* ~ (infix ~ prefix? ~ primary ~ postfix*)* }
 
-prefix  = _{ negation_op | sign_op }
-infix   = _{ exponent_op | multiplication_op | addition_op | comparison_op | equal_op | and_op | or_op | string_op }
-postfix = _{ ternary | range_start_op | range_end_op | opt_membership_op | opt_index_op | membership_op | index_op | default_op | pipe }
+prefix  = _{ not_op | sign_op }
+infix   = _{ exponent_op | multiplication_op | addition_op | range_op | comparison_op | equality_op | logical_and_op | logical_or_op | relation_op }
+postfix = _{ ternary_op | slice_from_op | slice_to_op | optional_member_op | optional_index_op | member_op | index_op | default_op | pipe_op }
 
-func              =  { ident ~ "(" ~ (func_arg ~ ("," ~ func_arg)*)? ~ (","? ~ predicate)? ~ ")" }
-func_arg          = _{ expr | braced_predicate }
-braced_predicate  =  { "{" ~ (program | expr) ~ "}" }
-pipe              =  { "|" ~ func }
-predicate         =  { "." ~ ident | ("{"? ~ (program | expr) ~ "}"?) }
-term              = _{ func | range | value | ident | array | map | "(" ~ expr ~ ")" }
-ternary           =  { "?" ~ expr ~ ":" ~ expr }
-membership_op     =  { "." ~ ident }
-opt_membership_op =  { "?." ~ ident }
-opt_index_op      =  { "?." ~ "[" ~ expr ~ "]" }
-default_op        =  { "??" ~ expr }
-index_op          =  { "[" ~ expr ~ "]" }
-range_start_op    =  { "[" ~ expr ~ ":" ~ expr? ~ "]" }
-range_end_op      =  { "[" ~ ":" ~ expr? ~ "]" }
-negation_op       =  { "!" | "not" }
-sign_op           =  { "+" | "-" }
-exponent_op       =  { "**" | "^" }
-multiplication_op =  { "*" | "/" | "%" }
-addition_op       =  { "+" | "-" }
-comparison_op     =  { "<=" | ">=" | "<" | ">" }
-equal_op          =  { "==" | "!=" }
-and_op            =  { "&&" | "and" }
-or_op             =  { "||" | "or" }
-string_op         =  { "in" | "contains" | "startsWith" | "endsWith" | "matches" }
+primary          = _{ call | literal | ident | array | map | group }
+group            =  { "(" ~ expr ~ ")" }
+call             =  { ident ~ "(" ~ (func_arg ~ ("," ~ func_arg)*)? ~ (","? ~ predicate)? ~ ")" }
+func_arg         = _{ expr | braced_predicate }
+braced_predicate =  { "{" ~ (program | expr) ~ "}" }
+predicate        =  { "." ~ ident | ("{"? ~ (program | expr) ~ "}"?) }
 
-value            =  { string | string_multiline | decimal | int | bool | nil }
+ternary_op         = { "?" ~ expr ~ ":" ~ expr }
+default_op         = { "??" ~ expr }
+pipe_op            = { "|" ~ call }
+member_op          = { "." ~ ident }
+optional_member_op = { "?." ~ ident }
+index_op           = { "[" ~ expr ~ "]" }
+optional_index_op  = { "?." ~ "[" ~ expr ~ "]" }
+slice_from_op      = { "[" ~ expr ~ ":" ~ expr? ~ "]" }
+slice_to_op        = { "[" ~ ":" ~ expr? ~ "]" }
+
+not_op            = { "!" | "not" }
+sign_op           = { "+" | "-" }
+exponent_op       = { "**" | "^" }
+multiplication_op = { "*" | "/" | "%" }
+addition_op       = { "+" | "-" }
+range_op          = { ".." }
+comparison_op     = { "<=" | ">=" | "<" | ">" }
+equality_op       = { "==" | "!=" }
+logical_and_op    = { "&&" | "and" }
+logical_or_op     = { "||" | "or" }
+relation_op       = { "in" | "contains" | "startsWith" | "endsWith" | "matches" }
+
+literal          =  { string | string_multiline | decimal | int | bool | nil }
 array            =  { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 map              =  { "{" ~ (ident ~ ":" ~ expr ~ ("," ~ ident ~ ":" ~ expr)*)? ~ "}" }
-range            =  { value ~ ".." ~ value }
 string           = ${ ("\"" ~ inner_double ~ "\"" | "'" ~ inner_single ~ "'") }
 string_multiline = ${ "`" ~ inner_multiline ~ "`" }
 inner_single     = @{ char_single* }

@@ -262,4 +262,4 @@ impl<'a> Environment<'a> {
     }
 }
 
-pub(crate) static DEFAULT_ENVIRONMENT: Lazy<Environment> = Lazy::new(|| Environment::new());
+pub(crate) static DEFAULT_ENVIRONMENT: Lazy<Environment> = Lazy::new(Environment::new);
