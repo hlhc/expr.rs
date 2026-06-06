@@ -27,6 +27,7 @@ mod context;
 mod eval;
 mod error;
 mod functions;
+mod optimizers;
 mod parser;
 mod pest;
 mod pratt;
@@ -40,8 +41,10 @@ pub use crate::context::Context;
 pub use crate::error::{Error, Result};
 pub use crate::eval::{Environment, run, eval};
 pub use crate::parser::compile;
+pub use crate::parser::compile_opts;
 #[allow(deprecated)]
 pub use crate::parser::Parser;
+pub use crate::ast::node::Node;
 pub use crate::ast::program::Program;
 pub use crate::value::Value;
 #[cfg(feature = "serde")]

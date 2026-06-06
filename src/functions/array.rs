@@ -105,7 +105,12 @@ pub fn add_array_functions(env: &mut Environment) {
                 let mut ctx = c.ctx.clone();
                 ctx.insert("#".to_string(), value.clone());
                 if let Value::Bool(true) = c.env.run(predicate.clone(), &ctx)? {
-                    result.push(value.clone());
+                    if let Some(ref map_node) = c.map_node {
+                        let transformed = c.env.eval_expr(&ctx, *map_node.clone())?;
+                        result.push(transformed);
+                    } else {
+                        result.push(value.clone());
+                    }
                 }
             }
         } else {
@@ -125,6 +130,9 @@ pub fn add_array_functions(env: &mut Environment) {
                 if let Value::Bool(true) = c.env.run(predicate.clone(), &ctx)? {
                     return Ok(value.clone());
                 }
+            }
+            if c.throws {
+                bail!("find(): no element matched the predicate");
             }
             Ok(Value::Nil)
         } else {
@@ -161,6 +169,9 @@ pub fn add_array_functions(env: &mut Environment) {
                 if let Value::Bool(true) = c.env.run(predicate.clone(), &ctx)? {
                     return Ok(value.clone());
                 }
+            }
+            if c.throws {
+                bail!("findLast(): no element matched the predicate");
             }
             Ok(Value::Nil)
         } else {
@@ -270,5 +281,122 @@ pub fn add_array_functions(env: &mut Environment) {
             if desc { cmp.reverse() } else { cmp }
         });
         Ok(keyed.into_iter().map(|(_, v)| v).collect::<Vec<_>>().into())
+    });
+
+    env.add_function("count", |c| {
+        if c.args.len() != 1 {
+            bail!("count() takes exactly one argument and a predicate");
+        }
+        let (Value::Array(a), Some(predicate)) = (&c.args[0], c.predicate) else {
+            bail!("count() takes an array as the first argument and a predicate");
+        };
+        let threshold = c.threshold.unwrap_or(i64::MAX);
+        let mut count: i64 = 0;
+        for value in a {
+            let mut ctx = c.ctx.clone();
+            ctx.insert("#".to_string(), value.clone());
+            if let Value::Bool(true) = c.env.run(predicate.clone(), &ctx)? {
+                count += 1;
+                if count >= threshold {
+                    break;
+                }
+            }
+        }
+        Ok(Value::Number(count))
+    });
+
+    env.add_function("sum", |c| {
+        if c.args.is_empty() || c.args.len() > 1 {
+            bail!("sum() takes exactly one argument and an optional predicate");
+        }
+        let Value::Array(a) = &c.args[0] else {
+            bail!("sum() takes an array as the first argument");
+        };
+        let mut total: f64 = 0.0;
+        let mut has_float = false;
+        if let Some(predicate) = c.predicate {
+            for value in a {
+                let mut ctx = c.ctx.clone();
+                ctx.insert("#".to_string(), value.clone());
+                match c.env.run(predicate.clone(), &ctx)? {
+                    Value::Number(n) => total += n as f64,
+                    Value::Float(f) => {
+                        total += f;
+                        has_float = true;
+                    }
+                    v => bail!("sum() predicate must return a number, got {v:?}"),
+                }
+            }
+        } else {
+            for value in a {
+                match value {
+                    Value::Number(n) => total += *n as f64,
+                    Value::Float(f) => {
+                        total += f;
+                        has_float = true;
+                    }
+                    v => bail!("sum() requires numeric array elements, got {v:?}"),
+                }
+            }
+        }
+        if has_float {
+            Ok(Value::Float(total))
+        } else {
+            Ok(Value::Number(total as i64))
+        }
+    });
+
+    env.add_function("reduce", |c| {
+        if c.args.is_empty() || c.args.len() > 2 {
+            bail!("reduce() takes an array, a predicate, and an optional initial value");
+        }
+        let Value::Array(a) = &c.args[0] else {
+            bail!("reduce() takes an array as the first argument");
+        };
+        let Some(predicate) = c.predicate else {
+            bail!("reduce() requires a predicate");
+        };
+        let initial = if c.args.len() == 2 {
+            Some(c.args[1].clone())
+        } else {
+            None
+        };
+        let has_initial = initial.is_some();
+        let mut acc = if let Some(init) = initial {
+            init
+        } else if a.is_empty() {
+            Value::Nil
+        } else {
+            a[0].clone()
+        };
+        let start_idx = if has_initial { 0 } else { 1 };
+        for (i, value) in a.iter().enumerate().skip(start_idx) {
+            let mut ctx = c.ctx.clone();
+            ctx.insert("#".to_string(), value.clone());
+            ctx.insert("#index".to_string(), Value::Number(i as i64));
+            ctx.insert("#acc".to_string(), acc.clone());
+            acc = c.env.run(predicate.clone(), &ctx)?;
+        }
+        Ok(acc)
+    });
+
+    env.add_function("first", |c| {
+        if c.args.len() != 1 {
+            bail!("first() takes exactly one argument");
+        }
+        match &c.args[0] {
+            Value::Array(a) => Ok(a.first().cloned().unwrap_or(Value::Nil)),
+            _ => bail!("first() takes an array as the argument"),
+        }
+    });
+
+    env.add_function("last", |c| {
+        if c.args.len() != 1 {
+            bail!("last() takes exactly one argument");
+        }
+        match &c.args[0] {
+            Value::Array(a) => Ok(a.last().cloned().unwrap_or(Value::Nil)),
+            _ => bail!("last() takes an array as the argument"),
+        }
     });
 }

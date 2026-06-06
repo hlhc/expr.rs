@@ -8,12 +8,24 @@ use pest::Parser as PestParser;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
-/// Parse an expr program to be run later
+/// Parse an expr program to be run later. Runs the optimizer by default.
 pub fn compile(code: &str) -> Result<Program> {
+    compile_opts(code, true)
+}
+
+/// Parse an expr program with explicit control over optimization.
+///
+/// Set `optimized` to `false` to skip the compile-time optimizer (useful for
+/// benchmarking or comparing AST sizes).
+pub fn compile_opts(code: &str, optimized: bool) -> Result<Program> {
     #[cfg(debug_assertions)]
     pest::set_error_detail(true);
     let pairs = ExprPest::parse(Rule::full, code).map_err(|e| Error::PestError(Box::new(e)))?;
-    Ok(pairs.into())
+    let mut program: Program = pairs.into();
+    if optimized {
+        program.optimize();
+    }
+    Ok(program)
 }
 
 /// Main struct for parsing and evaluating expr programs

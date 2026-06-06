@@ -44,7 +44,7 @@ bool             =  { "true" | "false" }
 nil              =  { "nil" }
 decimal          = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 
-ident         = @{ "#" | (("$" | ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")*) }
+ident         = @{ "#acc" | "#index" | "#" | (("$" | ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")*) }
 char_single   =  {
     !("'" | "\\") ~ ANY
   | "\\" ~ ("'" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")

@@ -510,3 +510,16 @@ proptest! {
 
 // pipe tests
 test!(pipe_sort, r#"[3, 1, 2] | sort()"#, "[1, 2, 3]");
+
+// Runtime function tests — verify built-in function behavior
+test!(runtime_count, "count([1, 2, 3, 4], {# > 2})", "2");
+test!(runtime_count_zero, "count([1, 2, 3], {# > 5})", "0");
+test!(runtime_sum, "sum([1, 2, 3, 4, 5])", "15");
+test!(runtime_sum_with_predicate, "sum([1, 2, 3], {# * 2})", "12");
+test!(runtime_sum_float, "sum([1.0, 2.0, 3.0])", "6");
+test!(runtime_reduce, "reduce([1, 2, 3, 4], {# + #acc})", "10");
+test!(runtime_reduce_no_initial, "reduce([1, 2, 3], {# + #acc})", "6");
+test!(runtime_first, "first([1, 2, 3])", "1");
+test!(runtime_first_empty, "first([])", "nil");
+test!(runtime_last, "last([1, 2, 3])", "3");
+test!(runtime_last_empty, "last([])", "nil");

@@ -4,6 +4,7 @@ pub mod json;
 
 use crate::Result;
 
+use crate::ast::node::Node;
 use crate::ast::program::Program;
 use crate::{bail, Context, Environment, Value};
 
@@ -15,16 +16,31 @@ pub struct ExprCall<'a, 'b> {
     pub predicate: Option<Program>,
     pub ctx: &'a Context,
     pub env: &'a Environment<'b>,
+    pub threshold: Option<i64>,
+    pub throws: bool,
+    pub map_node: Option<Box<Node>>,
 }
 
 impl Environment<'_> {
-    pub fn eval_func(&self, ctx: &Context, ident: String, args: Vec<Value>, predicate: Option<Program>) -> Result<Value> {
+    pub fn eval_func(
+        &self,
+        ctx: &Context,
+        ident: String,
+        args: Vec<Value>,
+        predicate: Option<Program>,
+        threshold: Option<i64>,
+        throws: bool,
+        map_node: Option<Box<Node>>,
+    ) -> Result<Value> {
         let call = ExprCall {
             ident,
             args,
             predicate,
             ctx,
             env: self,
+            threshold,
+            throws,
+            map_node,
         };
         if let Some(f) = self.functions.get(&call.ident) {
             f(call)

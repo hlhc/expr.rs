@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::iter::once;
 use crate::ast::node::Node;
 use crate::Rule;
@@ -6,7 +7,7 @@ use crate::{Context, Environment, Value};
 use log::trace;
 use pest::iterators::Pair;
 
-#[derive(Debug, Clone, strum::Display)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 pub enum PostfixOperator {
     Index { idx: Box<Node>, optional: bool },
     Range(Option<i64>, Option<i64>),
@@ -26,6 +27,31 @@ impl PostfixOperator {
                 left.contains_hash_ident() || right.contains_hash_ident()
             }
             PostfixOperator::Range(..) => false,
+        }
+    }
+
+    pub fn contains_func_call(&self) -> bool {
+        match self {
+            PostfixOperator::Index { idx, .. } => idx.contains_func_call(),
+            PostfixOperator::Default(node) => node.contains_func_call(),
+            PostfixOperator::Pipe(_) => true,
+            PostfixOperator::Ternary { left, right } => {
+                left.contains_func_call() || right.contains_func_call()
+            }
+            PostfixOperator::Range(..) => false,
+        }
+    }
+
+    pub fn collect_idents(&self, set: &mut HashSet<String>) {
+        match self {
+            PostfixOperator::Index { idx, .. } => idx.collect_idents(set),
+            PostfixOperator::Default(node) => node.collect_idents(set),
+            PostfixOperator::Pipe(func) => func.collect_idents(set),
+            PostfixOperator::Ternary { left, right } => {
+                left.collect_idents(set);
+                right.collect_idents(set);
+            }
+            PostfixOperator::Range(..) => {}
         }
     }
 }
@@ -114,13 +140,16 @@ impl Environment<'_> {
                     ident,
                     args,
                     predicate,
+                    threshold,
+                    throws,
+                    map_node,
                 } = *func
                 {
                     let args = args.into_iter()
                         .map(|arg| self.eval_expr(ctx, arg))
                         .chain(once(Ok(value)))
                         .collect::<Result<Vec<Value>>>()?;
-                    self.eval_func(ctx, ident, args, predicate.map(|p| *p))?
+                    self.eval_func(ctx, ident, args, predicate.map(|p| *p), threshold, throws, map_node)?
                 } else {
                     bail!("Invalid operand for operator |");
                 }

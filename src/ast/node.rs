@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use std::collections::HashSet;
 use crate::ast::operator::Operator;
 use crate::ast::postfix_operator::PostfixOperator;
 use crate::ast::unary_operator::UnaryOperator;
@@ -8,13 +9,20 @@ use log::trace;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::program::Program;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Ident(String),
     Array(Vec<Node>),
     Range(Box<Node>, Box<Node>),
     Value(Value),
-    Func { ident: String, args: Vec<Node>, predicate: Option<Box<Program>> },
+    Func {
+        ident: String,
+        args: Vec<Node>,
+        predicate: Option<Box<Program>>,
+        threshold: Option<i64>,
+        throws: bool,
+        map_node: Option<Box<Node>>,
+    },
     Unary {
         operator: UnaryOperator,
         node: Box<Node>,
@@ -34,7 +42,7 @@ impl Node {
     /// Check if this node or any of its children reference the `#` variable
     pub(crate) fn contains_hash_ident(&self) -> bool {
         match self {
-            Node::Ident(id) => id == "#",
+            Node::Ident(id) => id == "#" || id == "#acc" || id == "#index",
             Node::Operation { left, right, .. } => {
                 left.contains_hash_ident() || right.contains_hash_ident()
             }
@@ -62,6 +70,116 @@ impl Node {
                 | "findIndex" | "findLast" | "findLastIndex"
                 | "count" | "sum" | "reduce" | "groupBy" | "sortBy"
         )
+    }
+
+    /// Returns true if the entire subtree consists only of literal values (no
+    /// identifiers, no function calls, no ranges). Used by the constant folder.
+    pub fn is_constant(&self) -> bool {
+        match self {
+            Node::Value(_) => true,
+            Node::Array(items) => items.iter().all(|i| i.is_constant()),
+            Node::Operation { left, right, .. } => left.is_constant() && right.is_constant(),
+            Node::Unary { node, .. } => node.is_constant(),
+            Node::Range(_, _) => true, // grammar guarantees value..value
+            Node::Postfix { node, operator } => {
+                node.is_constant()
+                    && match operator {
+                        PostfixOperator::Index { idx, .. } => idx.is_constant(),
+                        _ => false,
+                    }
+            }
+            Node::Ident(_) | Node::Func { .. } => false,
+        }
+    }
+
+    /// Returns true if this subtree contains any function call (including
+    /// through postfix pipes). Used to avoid DCE on bindings that might have
+    /// side effects from user-defined functions.
+    pub fn contains_func_call(&self) -> bool {
+        match self {
+            Node::Func { .. } => true,
+            Node::Array(items) => items.iter().any(|i| i.contains_func_call()),
+            Node::Operation { left, right, .. } => {
+                left.contains_func_call() || right.contains_func_call()
+            }
+            Node::Unary { node, .. } => node.contains_func_call(),
+            Node::Postfix { node, operator } => {
+                node.contains_func_call() || operator.contains_func_call()
+            }
+            Node::Range(_, _) | Node::Value(_) | Node::Ident(_) => false,
+        }
+    }
+
+    /// Collect all identifier names referenced in this subtree into the given set.
+    pub fn collect_idents(&self, set: &mut HashSet<String>) {
+        match self {
+            Node::Ident(id) => {
+                set.insert(id.clone());
+            }
+            Node::Array(items) => {
+                for item in items {
+                    item.collect_idents(set);
+                }
+            }
+            Node::Range(start, end) => {
+                start.collect_idents(set);
+                end.collect_idents(set);
+            }
+            Node::Value(_) => {}
+            Node::Func {
+                args,
+                predicate,
+                map_node,
+                ..
+            } => {
+                for arg in args {
+                    arg.collect_idents(set);
+                }
+                if let Some(p) = predicate {
+                    for (_, val) in &p.lines {
+                        val.collect_idents(set);
+                    }
+                    p.expr.collect_idents(set);
+                }
+                if let Some(mn) = map_node {
+                    mn.collect_idents(set);
+                }
+            }
+            Node::Unary { node, .. } => node.collect_idents(set),
+            Node::Operation { left, right, .. } => {
+                left.collect_idents(set);
+                right.collect_idents(set);
+            }
+            Node::Postfix { node, operator } => {
+                node.collect_idents(set);
+                operator.collect_idents(set);
+            }
+        }
+    }
+
+    /// Count the total number of nodes in this subtree. Useful for measuring
+    /// AST size reduction from optimization.
+    pub fn node_count(&self) -> usize {
+        1 + match self {
+            Node::Value(_) | Node::Ident(_) => 0,
+            Node::Array(items) => items.iter().map(|i| i.node_count()).sum(),
+            Node::Range(start, end) => start.node_count() + end.node_count(),
+            Node::Func { args, .. } => args.iter().map(|a| a.node_count()).sum(),
+            Node::Unary { node, .. } => node.node_count(),
+            Node::Operation { left, right, .. } => left.node_count() + right.node_count(),
+            Node::Postfix { node, operator } => {
+                node.node_count() + operator_children_count(operator)
+            }
+        }
+    }
+}
+
+fn operator_children_count(op: &PostfixOperator) -> usize {
+    match op {
+        PostfixOperator::Index { idx, .. } => idx.node_count(),
+        PostfixOperator::Default(n) | PostfixOperator::Pipe(n) => n.node_count(),
+        PostfixOperator::Ternary { left, right } => left.node_count() + right.node_count(),
+        PostfixOperator::Range(..) => 0,
     }
 }
 
@@ -131,7 +249,7 @@ impl From<Pair<'_, Rule>> for Node {
                         expr: last,
                     }));
                 }
-                Node::Func { ident, args, predicate }
+                Node::Func { ident, args, predicate, threshold: None, throws: false, map_node: None }
             },
             Rule::array => Node::Array(pair.into_inner().map(|p| p.into()).collect()),
             Rule::map => {

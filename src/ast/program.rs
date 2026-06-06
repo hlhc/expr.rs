@@ -1,12 +1,38 @@
+use std::collections::HashSet;
 use crate::ast::node::Node;
 use crate::Rule;
 use pest::iterators::{Pair, Pairs};
 
 /// A parsed expr program that can be run
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Program {
     pub(crate) lines: Vec<(String, Node)>,
     pub(crate) expr: Node,
+}
+
+impl Program {
+    /// Collect all identifiers referenced in the main expression.
+    pub fn collect_expr_idents(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        self.expr.collect_idents(&mut set);
+        set
+    }
+
+    /// Count the total number of AST nodes in the program (lines + expr).
+    pub fn node_count(&self) -> usize {
+        self.lines.iter().map(|(_, n)| n.node_count()).sum::<usize>()
+            + self.expr.node_count()
+    }
+
+    /// Read-only access to the variable bindings (from `let` statements).
+    pub fn lines(&self) -> &[(String, Node)] {
+        &self.lines
+    }
+
+    /// Read-only access to the main expression.
+    pub fn expr(&self) -> &Node {
+        &self.expr
+    }
 }
 
 impl<'i> From<Pairs<'i, Rule>> for Program {

@@ -7,7 +7,7 @@ use log::trace;
 use pest::iterators::Pair;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, strum::EnumString)]
+#[derive(Debug, Clone, PartialEq, strum::EnumString)]
 pub enum UnaryOperator {
     #[strum(serialize = "!")]
     Not,

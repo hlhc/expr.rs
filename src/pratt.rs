@@ -5,7 +5,7 @@ use pest::pratt_parser::PrattParser;
 pub(crate) static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::{Assoc::*, Op};
     use Rule::*;
-
+    
     PrattParser::new()
         .op(Op::postfix(ternary))
         .op(Op::postfix(pipe))

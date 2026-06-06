@@ -142,12 +142,15 @@ impl<'a> Environment<'a> {
                 ident,
                 args,
                 predicate,
+                threshold,
+                throws,
+                map_node,
             } => {
                 let args = args
                     .into_iter()
                     .map(|e| self.eval_expr(ctx, e))
                     .collect::<Result<_>>()?;
-                self.eval_func(ctx, ident, args, predicate.map(|l| *l))?
+                self.eval_func(ctx, ident, args, predicate.map(|l| *l), threshold, throws, map_node)?
             },
             Node::Operation {
                 left,
