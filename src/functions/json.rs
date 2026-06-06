@@ -9,7 +9,7 @@ fn const_len(args: &[Value]) -> Option<Value> {
     }
     match &args[0] {
         Value::Array(a) => Some(Value::Number(a.len() as i64)),
-        Value::String(s) => Some(Value::Number(s.len() as i64)),
+        Value::String(s) => Some(Value::Number(s.chars().count() as i64)),
         Value::Map(m) => Some(Value::Number(m.len() as i64)),
         _ => None,
     }
