@@ -4,6 +4,7 @@ use crate::Value;
 
 /// Converts `x in m..n` to `x >= m && x <= n` when m and n are integer constants.
 /// This enables further constant folding if x is also a constant.
+#[allow(dead_code)]
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Operation {
         operator: Operator::In,
@@ -39,7 +40,7 @@ mod tests {
     use crate::{Context, eval, Result};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
-    use super::super::test_helpers::{num, bool_val, optimize_node};
+    use super::super::test_helpers::{num, optimize_node};
 
     #[test]
     fn in_range_conversion() -> Result<()> {
@@ -57,13 +58,14 @@ mod tests {
     }
 
     #[test]
-    fn ast_in_range_converts_to_comparison() {
+    fn ast_in_range_preserved() {
         let mut n = Node::Operation {
             operator: Operator::In,
             left: Box::new(num(3)),
             right: Box::new(Node::Range(Box::new(num(1)), Box::new(num(5)))),
         };
-        let optimized = optimize_node(&mut n);
-        assert_eq!(optimized, bool_val(true));
+        let original = n.clone();
+        optimize_node(&mut n);
+        assert_eq!(n, original, "x in m..n must not be rewritten to comparisons - duplicates evaluation");
     }
 }

@@ -6,6 +6,7 @@ use crate::Value;
 
 /// Converts `x in [1, 2, 3]` to `x in {1: true, 2: true, 3: true}` for O(1) lookup.
 /// Only applies when all array elements are the same type (all integers or all strings).
+#[allow(dead_code)]
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Operation {
         operator: Operator::In,
@@ -54,7 +55,7 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result, Value};
+    use crate::{Context, eval, Result};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
     use super::super::test_helpers::{num, optimize_node};
@@ -74,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    fn ast_in_array_converts_to_map() {
+    fn ast_in_array_preserved() {
         let mut n = Node::Operation {
             operator: Operator::In,
             left: Box::new(num(3)),
@@ -84,16 +85,8 @@ mod tests {
                 num(3),
             ])),
         };
-        let optimized = optimize_node(&mut n);
-        let map = match &optimized {
-            Node::Operation { operator: Operator::In, right, .. } => match right.as_ref() {
-                Node::Value(Value::Map(m)) => m.clone(),
-                other => panic!("Expected Map, got {other:?}"),
-            },
-            other => panic!("Expected In operation, got {other:?}"),
-        };
-        assert_eq!(map.get("1"), Some(&Value::Bool(true)));
-        assert_eq!(map.get("2"), Some(&Value::Bool(true)));
-        assert_eq!(map.get("3"), Some(&Value::Bool(true)));
+        let original = n.clone();
+        optimize_node(&mut n);
+        assert_eq!(n, original, "x in [a,b,c] must not be rewritten to map - type-mixing unsafe");
     }
 }

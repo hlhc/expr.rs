@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
+use crate::ast::node::Node;
 use crate::ast::program::Program;
+use crate::Value;
 
 pub fn optimize(program: &mut Program) {
     let mut live: HashSet<String> = program.collect_expr_idents();
@@ -17,7 +19,23 @@ pub fn optimize(program: &mut Program) {
         }
     }
 
-    program.lines.retain(|(id, _)| live.contains(id.as_str()));
+    // Only elide unreferenced bindings whose values are inert (cannot produce
+    // runtime errors). Pure Value literals and numeric Ranges are inert;
+    // everything else (Idents, Func calls, Operations, Postfix, etc.) is kept.
+    program.lines.retain(|(id, v)| {
+        live.contains(id.as_str()) || !is_inert(v)
+    });
+}
+
+fn is_inert(node: &Node) -> bool {
+    match node {
+        Node::Value(_) => true,
+        Node::Range(start, end) => matches!(
+            (start.as_ref(), end.as_ref()),
+            (Node::Value(Value::Number(_)), Node::Value(Value::Number(_)))
+        ),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -26,10 +44,45 @@ mod tests {
     use super::super::test_helpers::check_optimized_eq_unoptimized;
 
     #[test]
-    fn dce_removes_unreferenced_binding() -> Result<()> {
-        let program = compile("let unused = len([1, 2]); 1")?;
+    fn dce_removes_unreferenced_pure_value() -> Result<()> {
+        let program = compile("let unused = 42; 1")?;
         assert!(!program.lines.iter().any(|(id, _)| id == "unused"));
         Ok(())
+    }
+
+    #[test]
+    fn dce_keeps_unreferenced_func_call() -> Result<()> {
+        let program = compile("let unused = len([1, 2]); 1")?;
+        assert!(program.lines.iter().any(|(id, _)| id == "unused"));
+        Ok(())
+    }
+
+    #[test]
+    fn dce_keeps_unreferenced_ident() -> Result<()> {
+        let program = compile("let unused = missing; 1")?;
+        assert!(program.lines.iter().any(|(id, _)| id == "unused"));
+        Ok(())
+    }
+
+    #[test]
+    fn dce_removes_unreferenced_numeric_range() -> Result<()> {
+        let program = compile("let unused = 0..2; 1")?;
+        assert!(!program.lines.iter().any(|(id, _)| id == "unused"));
+        Ok(())
+    }
+
+    #[test]
+    fn dce_keeps_unreferenced_non_numeric_range() -> Result<()> {
+        let program = compile("let unused = true..false; 1")?;
+        assert!(program.lines.iter().any(|(id, _)| id == "unused"));
+        Ok(())
+    }
+
+    #[test]
+    fn regr_dce_unreferenced_ident_errors() {
+        super::super::test_helpers::check_both_error("let unused = missing; 1");
+        super::super::test_helpers::check_both_error("let unused = \"a\" / 2; 2");
+        super::super::test_helpers::check_both_error("let unused = true..false; 1");
     }
 
     #[test]

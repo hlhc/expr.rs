@@ -77,8 +77,6 @@ impl Node {
         let mut restructured = false;
         match self {
             Node::Operation { .. } => {
-                restructured |= in_array::optimize(self);
-                restructured |= in_range::optimize(self);
                 restructured |= predicate_combination::optimize(self);
             }
             Node::Func { .. } => {
@@ -173,25 +171,21 @@ impl Node {
 
 impl Program {
     pub fn optimize(&mut self) {
-        // Phase 1: bottom-up structural transformations (fold, in_range, etc.)
+        // Phase 1: bottom-up structural transformations (fold, etc.)
         for (_, value) in &mut self.lines {
             value.optimize();
         }
         self.expr.optimize();
 
-        // Phase 2: expand ranges BEFORE prop so const_key can resolve r[1]
-        // after constant substitution introduces new array literals.
-        for (_, value) in &mut self.lines {
-            value.expand_ranges();
-        }
-        self.expr.expand_ranges();
-
-        // Phase 3–4: constant propagation. When constants are found and
+        // Phase 2–3: constant propagation. When constants are found and
         // substituted, prop re-optimizes and expands ranges only for the
         // binding(s) that actually changed (not the entire program).
+        // Range expansion is deferred until evaluation time; only
+        // substituted constants get expanded during propagation.
         prop::optimize(self);
 
-        // Phase 5: dead code elimination
+        // Phase 4: dead code elimination (only removes unreferenced pure
+        // Value literals, preserving error/fault semantics).
         dce::optimize(self);
     }
 }
@@ -250,6 +244,9 @@ pub(crate) mod test_helpers {
 #[cfg(test)]
 mod tests {
     use crate::{Context, eval, Result};
+    use crate::compile;
+    use crate::ast::node::Node;
+    use super::test_helpers::{check_optimized_eq_unoptimized, check_both_error};
 
     #[test]
     fn combined_fold_and_propagation() -> Result<()> {
@@ -283,5 +280,50 @@ mod tests {
             "10"
         );
         Ok(())
+    }
+
+    // ---- Safety regression: optimized == unoptimized for risky patterns ----
+
+    #[test]
+    fn regr_safe_no_algebraic_identity_errors() {
+        check_both_error(r#"let s = "hello"; s + 0"#);
+        check_both_error("let x = 5.0; x + 0");
+    }
+
+    #[test]
+    fn regr_safe_double_negation_non_bool_errors() {
+        check_both_error(r#"not(not("not a bool"))"#);
+        check_both_error("not(not(42))");
+    }
+
+    #[test]
+    fn regr_safe_in_array_type_mixing() -> Result<()> {
+        check_optimized_eq_unoptimized(r#""1" in [1, 2, 3]"#, "false")
+    }
+
+    #[test]
+    fn regr_safe_dce_preserves_errors() {
+        check_both_error("let unused = missing; 1");
+        check_both_error(r#"let unused = "a" / 2; 2"#);
+        check_both_error("let unused = len(missing); 1");
+    }
+
+    #[test]
+    fn regr_safe_dce_removes_pure_values() -> Result<()> {
+        let program = compile("let unused = 42; 1")?;
+        assert!(program.lines.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn regr_safe_range_deferred_expansion() -> Result<()> {
+        let program = compile("0..2")?;
+        assert!(matches!(program.expr, Node::Range(..)), "range should stay as Range");
+        Ok(())
+    }
+
+    #[test]
+    fn regr_safe_range_eval_still_works() -> Result<()> {
+        check_optimized_eq_unoptimized("0..2", "[0, 1, 2]")
     }
 }

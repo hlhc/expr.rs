@@ -6,7 +6,6 @@ use crate::Value;
 pub fn optimize(node: &mut Node) -> bool {
     let mut changed = false;
     changed |= try_constant_fold(node);
-    changed |= try_algebraic_identity(node);
     changed |= try_boolean_minimization(node);
     changed
 }
@@ -150,75 +149,6 @@ fn compare(left: &Value, right: &Value) -> Option<std::cmp::Ordering> {
     }
 }
 
-// ---- Algebraic Identities ----
-
-fn try_algebraic_identity(node: &mut Node) -> bool {
-    if let Node::Operation {
-        operator, left, right,
-    } = node
-    {
-        match operator {
-            Operator::Add => {
-                if is_numeric_zero(right) {
-                    *node = *left.clone();
-                    return true;
-                } else if is_numeric_zero(left) {
-                    *node = *right.clone();
-                    return true;
-                }
-            }
-            Operator::Subtract => {
-                if is_numeric_zero(right) {
-                    *node = *left.clone();
-                    return true;
-                } else if left == right {
-                    *node = Node::Value(Value::Number(0));
-                    return true;
-                }
-            }
-            Operator::Multiply => {
-                if is_numeric_one(left) {
-                    *node = *right.clone();
-                    return true;
-                } else if is_numeric_one(right) {
-                    *node = *left.clone();
-                    return true;
-                }
-            }
-            Operator::Divide => {
-                if is_numeric_one(right) {
-                    *node = *left.clone();
-                    return true;
-                }
-            }
-            Operator::Pow => {
-                if is_numeric_one(right) {
-                    *node = *left.clone();
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
-}
-
-fn is_numeric_zero(node: &Node) -> bool {
-    match node {
-        Node::Value(Value::Number(0)) => true,
-        Node::Value(Value::Float(f)) => *f == 0.0,
-        _ => false,
-    }
-}
-
-fn is_numeric_one(node: &Node) -> bool {
-    match node {
-        Node::Value(Value::Number(1)) => true,
-        Node::Value(Value::Float(f)) => *f == 1.0,
-        _ => false,
-    }
-}
-
 // ---- Boolean Algebra Minimization ----
 
 fn try_boolean_minimization(node: &mut Node) -> bool {
@@ -239,8 +169,10 @@ fn try_boolean_minimization(node: &mut Node) -> bool {
                 operator: UnaryOperator::Not,
                 node: double_inner,
             } => {
-                *node = *double_inner.clone();
-                return true;
+                if let Node::Value(Value::Bool(_)) = double_inner.as_ref() {
+                    *node = *double_inner.clone();
+                    return true;
+                }
             }
             _ => {}
         },
@@ -466,27 +398,31 @@ mod tests {
     }
 
     #[test]
-    fn ast_identity_multiply_by_one() {
+    fn ast_identity_multiply_by_one_preserved() {
         let mut n = Node::Operation {
             operator: Operator::Multiply,
             left: Box::new(Node::Ident("x".into())),
             right: Box::new(num(1)),
         };
-        assert_eq!(optimize_node(&mut n), Node::Ident("x".into()));
+        let original = n.clone();
+        optimize_node(&mut n);
+        assert_eq!(n, original, "x * 1 must not be simplified - type-unsafe for non-numeric x");
     }
 
     #[test]
-    fn ast_identity_add_zero() {
+    fn ast_identity_add_zero_preserved() {
         let mut n = Node::Operation {
             operator: Operator::Add,
             left: Box::new(Node::Ident("x".into())),
             right: Box::new(num(0)),
         };
-        assert_eq!(optimize_node(&mut n), Node::Ident("x".into()));
+        let original = n.clone();
+        optimize_node(&mut n);
+        assert_eq!(n, original, "x + 0 must not be simplified - type-unsafe for non-numeric x");
     }
 
     #[test]
-    fn ast_boolean_double_negation() {
+    fn ast_double_negation_ident_preserved() {
         let mut n = Node::Unary {
             operator: UnaryOperator::Not,
             node: Box::new(Node::Unary {
@@ -494,7 +430,22 @@ mod tests {
                 node: Box::new(Node::Ident("x".into())),
             }),
         };
-        assert_eq!(optimize_node(&mut n), Node::Ident("x".into()));
+        let original = n.clone();
+        optimize_node(&mut n);
+        assert_eq!(n, original, "!!x must not be simplified - type-unsafe for non-Bool x");
+    }
+
+    #[test]
+    fn ast_double_negation_bool_still_folds() {
+        // !!true -> true via constant folding (not via !!x elimination)
+        let mut n = Node::Unary {
+            operator: UnaryOperator::Not,
+            node: Box::new(Node::Unary {
+                operator: UnaryOperator::Not,
+                node: Box::new(bool_val(true)),
+            }),
+        };
+        assert_eq!(optimize_node(&mut n), bool_val(true));
     }
 
     #[test]

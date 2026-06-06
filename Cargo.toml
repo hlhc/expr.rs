@@ -9,6 +9,7 @@ homepage = "https://github.com/jdx/expr.rs"
 repository = "https://github.com/jdx/expr.rs"
 description = "Implementation of expr language in Rust"
 include = [
+    "/examples/**/*.rs",
     "/src/**/*.pest",
     "/src/**/*.rs",
 ]
