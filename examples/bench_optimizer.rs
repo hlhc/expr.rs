@@ -5,7 +5,7 @@
 //!
 //! Run with: `cargo run --example bench_optimizer --release`
 
-use expr::{Context, Environment, compile_opts};
+use expr::{CompileOpts, Context, Environment};
 use std::time::Instant;
 
 fn main() {
@@ -28,11 +28,11 @@ fn main() {
     let ctx = Context::default();
 
     let t0 = Instant::now();
-    let prog_opt = compile_opts(code, true).unwrap();
+    let prog_opt = env.compile_opts(code, &CompileOpts { optimized: true }).unwrap();
     let compile_opt_us = t0.elapsed().as_micros();
 
     let t0 = Instant::now();
-    let prog_raw = compile_opts(code, false).unwrap();
+    let prog_raw = env.compile_opts(code, &CompileOpts { optimized: false }).unwrap();
     let compile_raw_us = t0.elapsed().as_micros();
 
     let nodes_opt = prog_opt.node_count();
