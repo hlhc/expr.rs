@@ -60,7 +60,10 @@ fn references_any_const(node: &Node, constants: &IndexMap<String, Node>) -> bool
         Node::Range(start, end) => {
             references_any_const(start, constants) || references_any_const(end, constants)
         }
-        Node::Postfix { node: inner, operator } => {
+        Node::Postfix {
+            node: inner,
+            operator,
+        } => {
             references_any_const(inner, constants)
                 || references_postfix_any_const(operator, constants)
         }
@@ -82,10 +85,7 @@ fn references_any_const(node: &Node, constants: &IndexMap<String, Node>) -> bool
     }
 }
 
-fn references_any_const_program(
-    program: &Program,
-    constants: &IndexMap<String, Node>,
-) -> bool {
+fn references_any_const_program(program: &Program, constants: &IndexMap<String, Node>) -> bool {
     program
         .lines
         .iter()
@@ -93,10 +93,7 @@ fn references_any_const_program(
         || references_any_const(&program.expr, constants)
 }
 
-fn references_postfix_any_const(
-    op: &PostfixOperator,
-    constants: &IndexMap<String, Node>,
-) -> bool {
+fn references_postfix_any_const(op: &PostfixOperator, constants: &IndexMap<String, Node>) -> bool {
     match op {
         PostfixOperator::Index { idx, .. } => references_any_const(idx, constants),
         PostfixOperator::Default(n) | PostfixOperator::Pipe(n) => {
@@ -131,7 +128,10 @@ fn resolve_ident_chain(node: &Node, constants: &IndexMap<String, Node>) -> Node 
                 right: Box::new(r),
             }
         }
-        Node::Unary { operator, node: inner } => Node::Unary {
+        Node::Unary {
+            operator,
+            node: inner,
+        } => Node::Unary {
             operator: operator.clone(),
             node: Box::new(resolve_ident_chain(inner, constants)),
         },
@@ -145,7 +145,10 @@ fn resolve_ident_chain(node: &Node, constants: &IndexMap<String, Node>) -> Node 
             Box::new(resolve_ident_chain(start, constants)),
             Box::new(resolve_ident_chain(end, constants)),
         ),
-        Node::Postfix { operator, node: inner } => Node::Postfix {
+        Node::Postfix {
+            operator,
+            node: inner,
+        } => Node::Postfix {
             operator: resolve_postfix_operator(operator, constants),
             node: Box::new(resolve_ident_chain(inner, constants)),
         },
@@ -198,10 +201,7 @@ fn resolve_postfix_operator(
     }
 }
 
-fn resolve_ident_chain_program(
-    program: &Program,
-    constants: &IndexMap<String, Node>,
-) -> Program {
+fn resolve_ident_chain_program(program: &Program, constants: &IndexMap<String, Node>) -> Program {
     Program {
         lines: program
             .lines
@@ -253,7 +253,10 @@ fn substitute_constants(node: &mut Node, constants: &IndexMap<String, Node>) -> 
             let b = substitute_constants(right, constants);
             a || b
         }
-        Node::Postfix { node: inner, operator } => {
+        Node::Postfix {
+            node: inner,
+            operator,
+        } => {
             let a = substitute_constants(inner, constants);
             let b = substitute_postfix_constants(operator, constants);
             a || b
@@ -262,10 +265,7 @@ fn substitute_constants(node: &mut Node, constants: &IndexMap<String, Node>) -> 
     }
 }
 
-fn substitute_constants_program(
-    program: &mut Program,
-    constants: &IndexMap<String, Node>,
-) -> bool {
+fn substitute_constants_program(program: &mut Program, constants: &IndexMap<String, Node>) -> bool {
     let mut changed = false;
     for (_, val) in &mut program.lines {
         changed |= substitute_constants(val, constants);
@@ -294,13 +294,22 @@ fn substitute_postfix_constants(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn constant_propagation() -> Result<()> {
-        assert_eq!(eval("let x = 5; x + 3", &Context::default())?.to_string(), "8");
-        assert_eq!(eval("let y = 10; y * 2", &Context::default())?.to_string(), "20");
-        assert_eq!(eval("let a = 1; let b = a; b + 4", &Context::default())?.to_string(), "5");
+        assert_eq!(
+            eval("let x = 5; x + 3", &Context::default())?.to_string(),
+            "8"
+        );
+        assert_eq!(
+            eval("let y = 10; y * 2", &Context::default())?.to_string(),
+            "20"
+        );
+        assert_eq!(
+            eval("let a = 1; let b = a; b + 4", &Context::default())?.to_string(),
+            "5"
+        );
         Ok(())
     }
 }

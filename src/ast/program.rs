@@ -1,7 +1,7 @@
-use std::collections::HashSet;
-use crate::ast::node::Node;
 use crate::Rule;
+use crate::ast::node::Node;
 use pest::iterators::{Pair, Pairs};
+use std::collections::HashSet;
 
 /// A parsed expr program that can be run
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -20,7 +20,10 @@ impl Program {
 
     /// Count the total number of AST nodes in the program (lines + expr).
     pub fn node_count(&self) -> usize {
-        self.lines.iter().map(|(_, n)| n.node_count()).sum::<usize>()
+        self.lines
+            .iter()
+            .map(|(_, n)| n.node_count())
+            .sum::<usize>()
             + self.expr.node_count()
     }
 

@@ -1,8 +1,8 @@
-use crate::ast::node::Node;
 use crate::Rule;
 use crate::Value::Bool;
-use crate::{bail, Result};
+use crate::ast::node::Node;
 use crate::{Context, Environment, Value};
+use crate::{Result, bail};
 use log::trace;
 use pest::iterators::Pair;
 use std::str::FromStr;

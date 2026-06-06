@@ -30,15 +30,21 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::postfix_operator::PostfixOperator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn pipe_unwrapping() -> Result<()> {
-        assert_eq!(eval("[3, 1, 2] | sort()", &Context::default())?.to_string(), "[1, 2, 3]");
-        assert_eq!(eval("[1, 2, 3] | len()", &Context::default())?.to_string(), "3");
+        assert_eq!(
+            eval("[3, 1, 2] | sort()", &Context::default())?.to_string(),
+            "[1, 2, 3]"
+        );
+        assert_eq!(
+            eval("[1, 2, 3] | len()", &Context::default())?.to_string(),
+            "3"
+        );
         Ok(())
     }
 

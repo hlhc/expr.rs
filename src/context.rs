@@ -20,7 +20,7 @@ impl Context {
 }
 
 impl<S: Display, T: Into<Value>> FromIterator<(S, T)> for Context {
-    fn from_iter<I: IntoIterator<Item=(S, T)>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = (S, T)>>(iter: I) -> Self {
         let mut ctx = Self::default();
         for (k, v) in iter {
             ctx.insert(k.to_string(), v);

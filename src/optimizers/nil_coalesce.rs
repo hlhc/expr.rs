@@ -17,15 +17,18 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result, Value};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::postfix_operator::PostfixOperator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, Value, eval};
 
     #[test]
     fn nil_coalesce_non_nil() -> Result<()> {
         assert_eq!(eval("5 ?? 10", &Context::default())?.to_string(), "5");
-        assert_eq!(eval(r#""hi" ?? "bye""#, &Context::default())?.to_string(), r#""hi""#);
+        assert_eq!(
+            eval(r#""hi" ?? "bye""#, &Context::default())?.to_string(),
+            r#""hi""#
+        );
         Ok(())
     }
 
@@ -51,9 +54,12 @@ mod tests {
             node: Box::new(Node::Value(Value::Nil)),
         };
         let optimized = optimize_node(&mut n);
-        assert!(matches!(optimized, Node::Postfix {
-            operator: PostfixOperator::Default(_),
-            node: _,
-        }));
+        assert!(matches!(
+            optimized,
+            Node::Postfix {
+                operator: PostfixOperator::Default(_),
+                node: _,
+            }
+        ));
     }
 }

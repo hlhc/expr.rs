@@ -8,7 +8,9 @@ use crate::ast::program::Program;
 ///   none(x, p1) && none(x, p2) → none(x, p1 || p2)
 pub fn optimize(node: &mut Node) -> bool {
     let Node::Operation {
-        operator, left, right,
+        operator,
+        left,
+        right,
     } = node
     else {
         return false;
@@ -87,16 +89,24 @@ fn combined_operator(fn_name: &str, op: &Operator) -> Option<Operator> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn predicate_combination_all_and_all() -> Result<()> {
         assert_eq!(
-            eval("all([1, 2, 3], {# > 0}) && all([1, 2, 3], {# < 4})", &Context::default())?.to_string(),
+            eval(
+                "all([1, 2, 3], {# > 0}) && all([1, 2, 3], {# < 4})",
+                &Context::default()
+            )?
+            .to_string(),
             "true"
         );
         assert_eq!(
-            eval("all([1, 2, 3], {# > 2}) && all([1, 2, 3], {# < 4})", &Context::default())?.to_string(),
+            eval(
+                "all([1, 2, 3], {# > 2}) && all([1, 2, 3], {# < 4})",
+                &Context::default()
+            )?
+            .to_string(),
             "false"
         );
         Ok(())
@@ -105,11 +115,19 @@ mod tests {
     #[test]
     fn predicate_combination_any_or_any() -> Result<()> {
         assert_eq!(
-            eval("any([1, 2, 3], {# > 2}) || any([1, 2, 3], {# < 0})", &Context::default())?.to_string(),
+            eval(
+                "any([1, 2, 3], {# > 2}) || any([1, 2, 3], {# < 0})",
+                &Context::default()
+            )?
+            .to_string(),
             "true"
         );
         assert_eq!(
-            eval("any([1, 2, 3], {# > 5}) || any([1, 2, 3], {# < 0})", &Context::default())?.to_string(),
+            eval(
+                "any([1, 2, 3], {# > 5}) || any([1, 2, 3], {# < 0})",
+                &Context::default()
+            )?
+            .to_string(),
             "false"
         );
         Ok(())
@@ -118,7 +136,11 @@ mod tests {
     #[test]
     fn predicate_combination_none_and_none() -> Result<()> {
         assert_eq!(
-            eval("none([1, 2, 3], {# > 3}) && none([1, 2, 3], {# < 1})", &Context::default())?.to_string(),
+            eval(
+                "none([1, 2, 3], {# > 3}) && none([1, 2, 3], {# < 1})",
+                &Context::default()
+            )?
+            .to_string(),
             "true"
         );
         Ok(())

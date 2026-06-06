@@ -3,9 +3,9 @@ use once_cell::sync::Lazy;
 use pest::pratt_parser::PrattParser;
 
 pub(crate) static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
-    use pest::pratt_parser::{Assoc::*, Op};
     use Rule::*;
-    
+    use pest::pratt_parser::{Assoc::*, Op};
+
     PrattParser::new()
         .op(Op::postfix(ternary))
         .op(Op::postfix(pipe))

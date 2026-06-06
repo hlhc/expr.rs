@@ -1,6 +1,6 @@
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::operator::Operator;
-use crate::Value;
 
 /// Converts `x in m..n` to `x >= m && x <= n` when m and n are integer constants.
 /// This enables further constant folding if x is also a constant.
@@ -11,36 +11,34 @@ pub fn optimize(node: &mut Node) -> bool {
         left,
         right,
     } = node
+        && let Node::Range(start, end) = right.as_ref()
+        && let (Node::Value(Value::Number(m)), Node::Value(Value::Number(n))) =
+            (start.as_ref(), end.as_ref())
     {
-        if let Node::Range(start, end) = right.as_ref()
-            && let (Node::Value(Value::Number(m)), Node::Value(Value::Number(n))) =
-                (start.as_ref(), end.as_ref())
-        {
-            *node = Node::Operation {
-                operator: Operator::And,
-                left: Box::new(Node::Operation {
-                    operator: Operator::GreaterThanOrEqual,
-                    left: left.clone(),
-                    right: Box::new(Node::Value(Value::Number(*m))),
-                }),
-                right: Box::new(Node::Operation {
-                    operator: Operator::LessThanOrEqual,
-                    left: left.clone(),
-                    right: Box::new(Node::Value(Value::Number(*n))),
-                }),
-            };
-            return true;
-        }
+        *node = Node::Operation {
+            operator: Operator::And,
+            left: Box::new(Node::Operation {
+                operator: Operator::GreaterThanOrEqual,
+                left: left.clone(),
+                right: Box::new(Node::Value(Value::Number(*m))),
+            }),
+            right: Box::new(Node::Operation {
+                operator: Operator::LessThanOrEqual,
+                left: left.clone(),
+                right: Box::new(Node::Value(Value::Number(*n))),
+            }),
+        };
+        return true;
     }
     false
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn in_range_conversion() -> Result<()> {
@@ -66,6 +64,9 @@ mod tests {
         };
         let original = n.clone();
         optimize_node(&mut n);
-        assert_eq!(n, original, "x in m..n must not be rewritten to comparisons - duplicates evaluation");
+        assert_eq!(
+            n, original,
+            "x in m..n must not be rewritten to comparisons - duplicates evaluation"
+        );
     }
 }

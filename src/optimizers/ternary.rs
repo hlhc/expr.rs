@@ -1,6 +1,6 @@
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::postfix_operator::PostfixOperator;
-use crate::Value;
 
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Postfix {
@@ -25,10 +25,10 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::postfix_operator::PostfixOperator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn ternary_constant_condition() -> Result<()> {
