@@ -2,29 +2,25 @@ use crate::ast::node::Node;
 use crate::ast::program::Program;
 use crate::eval::Environment;
 use crate::functions::ExprCall;
-use crate::{ExprPest, Rule};
 use crate::{Context, Error, Result, Value};
+use crate::{ExprPest, Rule};
 use pest::Parser as PestParser;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
 /// Parse an expr program to be run later. Runs the optimizer by default.
-pub fn compile(code: &str) -> Result<Program> {
-    compile_opts(code, true)
-}
-
-/// Parse an expr program with explicit control over optimization.
 ///
-/// Set `optimized` to `false` to skip the compile-time optimizer (useful for
-/// benchmarking or comparing AST sizes).
-pub fn compile_opts(code: &str, optimized: bool) -> Result<Program> {
+/// This is conservative — it does NOT constant-fold built-in function
+/// calls because it has no access to the runtime `Environment` and
+/// therefore cannot know whether a built-in has been replaced.
+/// Prefer `Environment::compile` for better optimization.
+#[deprecated(note = "Use `Environment::compile` instead")]
+pub fn compile(code: &str) -> Result<Program> {
     #[cfg(debug_assertions)]
     pest::set_error_detail(true);
     let pairs = ExprPest::parse(Rule::full, code).map_err(|e| Error::PestError(Box::new(e)))?;
     let mut program: Program = pairs.into();
-    if optimized {
-        program.optimize();
-    }
+    program.optimize(None);
     Ok(program)
 }
 
@@ -38,7 +34,7 @@ pub fn compile_opts(code: &str, optimized: bool) -> Result<Program> {
 /// let p = Parser::new();
 /// assert_eq!(p.eval("foo + bar", &ctx).unwrap().to_string(), "3");
 /// ```
-#[deprecated(note = "Use `compile()` and `Environment` instead")]
+#[deprecated(note = "Use `Environment::compile()` and `Environment` instead")]
 #[derive(Default)]
 pub struct Parser<'a> {
     env: Environment<'a>,
@@ -86,12 +82,12 @@ impl<'a> Parser<'a> {
     where
         F: Fn(ExprCall) -> Result<Value> + 'a + Sync + Send,
     {
-        self.env.add_function(name, Box::new(f));
+        self.env.add_function(name, f);
     }
 
     /// Parse an expr program to be run later
     pub fn compile(&self, code: &str) -> Result<Program> {
-        compile(code)
+        self.env.compile(code)
     }
 
     /// Run a compiled expr program

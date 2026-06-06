@@ -1,27 +1,31 @@
-mod fold;
-mod prop;
-mod dce;
-mod pipe;
-mod range;
-mod ternary;
-mod nil_coalesce;
+mod const_func;
 mod const_key;
-mod in_array;
-mod in_range;
+mod count_any;
+mod count_threshold;
+mod dce;
 mod filter_first;
 mod filter_last;
 mod filter_len;
 mod filter_map;
+mod fold;
+mod in_array;
+mod in_range;
+mod nil_coalesce;
+mod pipe;
 mod predicate_combination;
+mod prop;
+mod range;
 mod sum_array;
 mod sum_map;
 mod sum_range;
-mod count_any;
-mod count_threshold;
+mod ternary;
+
+use indexmap::IndexMap;
 
 use crate::ast::node::Node;
 use crate::ast::postfix_operator::PostfixOperator;
 use crate::ast::program::Program;
+use crate::functions::FunctionDefinition;
 
 impl PostfixOperator {
     fn optimize_children(&mut self) {
@@ -170,21 +174,34 @@ impl Node {
 }
 
 impl Program {
-    pub fn optimize(&mut self) {
+    pub(crate) fn optimize(
+        &mut self,
+        functions: Option<&IndexMap<String, FunctionDefinition<'_>>>,
+    ) {
         // Phase 1: bottom-up structural transformations (fold, etc.)
         for (_, value) in &mut self.lines {
             value.optimize();
         }
         self.expr.optimize();
 
-        // Phase 2–3: constant propagation. When constants are found and
-        // substituted, prop re-optimizes and expands ranges only for the
-        // binding(s) that actually changed (not the entire program).
-        // Range expansion is deferred until evaluation time; only
-        // substituted constants get expanded during propagation.
-        prop::optimize(self);
+        // Phase 2: constant propagation + const-func folding, run to fixed point.
+        // Only active when function metadata is available (env-aware compile).
+        if let Some(fns) = functions {
+            loop {
+                let mut changed = prop::optimize(self);
+                for (_, value) in &mut self.lines {
+                    changed |= const_func::optimize(value, fns);
+                }
+                changed |= const_func::optimize(&mut self.expr, fns);
+                if !changed {
+                    break;
+                }
+            }
+        } else {
+            prop::optimize(self);
+        }
 
-        // Phase 4: dead code elimination (only removes unreferenced pure
+        // Phase 3: dead code elimination (only removes unreferenced pure
         // Value literals, preserving error/fault semantics).
         dce::optimize(self);
     }
@@ -193,7 +210,7 @@ impl Program {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use crate::ast::node::Node;
-    use crate::{Context, Value, compile_opts, run, Result};
+    use crate::{CompileOpts, Context, Environment, Result, Value, run};
 
     pub(crate) fn num(n: i64) -> Node {
         Node::Value(Value::Number(n))
@@ -208,10 +225,14 @@ pub(crate) mod test_helpers {
         n.clone()
     }
 
+    fn env_compile(code: &str, optimized: bool) -> Result<crate::Program> {
+        Environment::new().compile_opts(code, &CompileOpts { optimized })
+    }
+
     pub(crate) fn check_optimized_eq_unoptimized(code: &str, expected: &str) -> Result<()> {
         let ctx = Context::default();
-        let opt_program = compile_opts(code, true)?;
-        let unopt_program = compile_opts(code, false)?;
+        let opt_program = env_compile(code, true)?;
+        let unopt_program = env_compile(code, false)?;
         let opt_result = run(opt_program, &ctx)?;
         let unopt_result = run(unopt_program, &ctx)?;
         assert_eq!(
@@ -230,23 +251,23 @@ pub(crate) mod test_helpers {
     pub(crate) fn check_both_error(code: &str) {
         let ctx = Context::default();
         for optimized in [true, false] {
-            let label = if optimized { "optimized" } else { "unoptimized" };
-            let program = compile_opts(code, optimized).unwrap();
+            let label = if optimized {
+                "optimized"
+            } else {
+                "unoptimized"
+            };
+            let program = env_compile(code, optimized).unwrap();
             let result = run(program, &ctx);
-            assert!(
-                result.is_err(),
-                "{label} should have errored for: {code}"
-            );
+            assert!(result.is_err(), "{label} should have errored for: {code}");
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
-    use crate::compile;
+    use super::test_helpers::{check_both_error, check_optimized_eq_unoptimized};
     use crate::ast::node::Node;
-    use super::test_helpers::{check_optimized_eq_unoptimized, check_both_error};
+    use crate::{CompileOpts, Context, Environment, Result, eval};
 
     #[test]
     fn combined_fold_and_propagation() -> Result<()> {
@@ -310,15 +331,20 @@ mod tests {
 
     #[test]
     fn regr_safe_dce_removes_pure_values() -> Result<()> {
-        let program = compile("let unused = 42; 1")?;
+        let env = Environment::new();
+        let program = env.compile_opts("let unused = 42; 1", &CompileOpts { optimized: true })?;
         assert!(program.lines.is_empty());
         Ok(())
     }
 
     #[test]
     fn regr_safe_range_deferred_expansion() -> Result<()> {
-        let program = compile("0..2")?;
-        assert!(matches!(program.expr, Node::Range(..)), "range should stay as Range");
+        let env = Environment::new();
+        let program = env.compile_opts("0..2", &CompileOpts { optimized: true })?;
+        assert!(
+            matches!(program.expr, Node::Range(..)),
+            "range should stay as Range"
+        );
         Ok(())
     }
 
