@@ -1,5 +1,5 @@
-use crate::ast::node::Node;
 use crate::Value;
+use crate::ast::node::Node;
 
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Range(start, end) = node
@@ -14,9 +14,9 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result, Value};
-    use crate::ast::node::Node;
     use super::super::test_helpers::num;
+    use crate::ast::node::Node;
+    use crate::{Context, Result, Value, eval};
 
     #[test]
     fn range_expansion() -> Result<()> {

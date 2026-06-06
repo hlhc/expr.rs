@@ -1,12 +1,14 @@
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::operator::Operator;
-use crate::Value;
 
 /// Converts `count(arr, pred) > 0` and `count(arr, pred) >= 1` to `any(arr, pred)`.
 /// `any` terminates early on first match, unlike `count` which must scan everything.
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Operation {
-        operator, left, right,
+        operator,
+        left,
+        right,
     } = node
     {
         let threshold = match operator {
@@ -20,7 +22,12 @@ pub fn optimize(node: &mut Node) -> bool {
         };
 
         if threshold
-            && let Node::Func { ident, args, predicate, .. } = left.as_ref()
+            && let Node::Func {
+                ident,
+                args,
+                predicate,
+                ..
+            } = left.as_ref()
             && ident == "count"
             && args.len() == 1
         {
@@ -40,10 +47,10 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn count_any_gt_zero() -> Result<()> {

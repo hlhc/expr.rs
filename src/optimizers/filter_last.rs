@@ -1,21 +1,25 @@
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::postfix_operator::PostfixOperator;
-use crate::Value;
 
 /// Converts `filter(arr, pred)[-1]` to `findLast(arr, pred)` for early termination.
 /// Also converts `last(filter(arr, pred))` to `findLast(arr, pred)`.
 pub fn optimize(node: &mut Node) -> bool {
     // Pattern 1: filter(arr, pred)[-1]
     if let Node::Postfix {
-        operator:
-            PostfixOperator::Index {
-                idx,
-                optional: false,
-            },
+        operator: PostfixOperator::Index {
+            idx,
+            optional: false,
+        },
         node: container,
     } = node
         && let Node::Value(Value::Number(-1)) = idx.as_ref()
-        && let Node::Func { ident, args, predicate, .. } = container.as_ref()
+        && let Node::Func {
+            ident,
+            args,
+            predicate,
+            ..
+        } = container.as_ref()
         && ident == "filter"
         && args.len() == 1
     {
@@ -30,12 +34,15 @@ pub fn optimize(node: &mut Node) -> bool {
         return true;
     }
     // Pattern 2: last(filter(arr, pred))
-    if let Node::Func {
-        ident, args, ..
-    } = node
+    if let Node::Func { ident, args, .. } = node
         && ident == "last"
         && args.len() == 1
-        && let Node::Func { ident: inner_ident, args: inner_args, predicate, .. } = &args[0]
+        && let Node::Func {
+            ident: inner_ident,
+            args: inner_args,
+            predicate,
+            ..
+        } = &args[0]
         && inner_ident == "filter"
         && inner_args.len() == 1
     {
@@ -54,10 +61,10 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{check_optimized_eq_unoptimized, num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::postfix_operator::PostfixOperator;
-    use super::super::test_helpers::{num, optimize_node, check_optimized_eq_unoptimized};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn filter_last_optimization() -> Result<()> {

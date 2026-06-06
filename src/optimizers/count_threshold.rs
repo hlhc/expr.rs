@@ -1,6 +1,6 @@
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::operator::Operator;
-use crate::Value;
 
 /// Sets a threshold on `count` so it can exit early once enough matches are found.
 ///   count(arr, pred) > N  → threshold = N + 1
@@ -11,7 +11,9 @@ use crate::Value;
 /// Skips thresholds ≤ 1 which are handled by count_any.
 pub fn optimize(node: &mut Node) -> bool {
     if let Node::Operation {
-        operator, left, right,
+        operator,
+        left,
+        right,
     } = node
     {
         let count_node: &Node = left.as_ref();
@@ -49,7 +51,12 @@ pub fn optimize(node: &mut Node) -> bool {
 
         if let Some(t) = threshold_val
             && t > 1
-            && let Node::Func { ident, args, predicate, .. } = count_node
+            && let Node::Func {
+                ident,
+                args,
+                predicate,
+                ..
+            } = count_node
             && ident == "count"
             && args.len() == 1
         {
@@ -70,10 +77,10 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn count_threshold_gt() -> Result<()> {
@@ -163,7 +170,10 @@ mod tests {
         let mut n = make_count_op(0, Operator::GreaterThan);
         let optimized = optimize_node(&mut n);
         let threshold = extract_count_threshold(&optimized);
-        assert_eq!(threshold, None, "count > 0 → threshold should NOT be set (threshold = 1 skipped)");
+        assert_eq!(
+            threshold, None,
+            "count > 0 → threshold should NOT be set (threshold = 1 skipped)"
+        );
     }
 
     fn extract_count_threshold(node: &Node) -> Option<i64> {

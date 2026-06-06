@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
+use crate::Value;
 use crate::ast::node::Node;
 use crate::ast::program::Program;
-use crate::Value;
 
 pub fn optimize(program: &mut Program) {
     let mut live: HashSet<String> = program.collect_expr_idents();
@@ -22,14 +22,15 @@ pub fn optimize(program: &mut Program) {
     // Only elide unreferenced bindings whose values are inert (cannot produce
     // runtime errors). Pure Value literals and numeric Ranges are inert;
     // everything else (Idents, Func calls, Operations, Postfix, etc.) is kept.
-    program.lines.retain(|(id, v)| {
-        live.contains(id.as_str()) || !is_inert(v)
-    });
+    program
+        .lines
+        .retain(|(id, v)| live.contains(id.as_str()) || !is_inert(v));
 }
 
 fn is_inert(node: &Node) -> bool {
     match node {
         Node::Value(_) => true,
+        Node::Array(items) => items.iter().all(is_inert),
         Node::Range(start, end) => matches!(
             (start.as_ref(), end.as_ref()),
             (Node::Value(Value::Number(_)), Node::Value(Value::Number(_)))
@@ -40,8 +41,15 @@ fn is_inert(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{compile, Result};
+    #![allow(deprecated)]
+
     use super::super::test_helpers::check_optimized_eq_unoptimized;
+    use crate::{CompileOpts, Environment};
+    use crate::{Result, compile};
+
+    fn optimistic_compile(code: &str) -> Result<crate::Program> {
+        Environment::new().compile_opts(code, &CompileOpts { optimized: true })
+    }
 
     #[test]
     fn dce_removes_unreferenced_pure_value() -> Result<()> {
@@ -81,7 +89,7 @@ mod tests {
     #[test]
     fn regr_dce_unreferenced_ident_errors() {
         super::super::test_helpers::check_both_error("let unused = missing; 1");
-        super::super::test_helpers::check_both_error("let unused = \"a\" / 2; 2");
+        super::super::test_helpers::check_both_error(r#"let unused = "a" / 2; 2"#);
         super::super::test_helpers::check_both_error("let unused = true..false; 1");
     }
 
@@ -103,6 +111,29 @@ mod tests {
     #[test]
     fn dce_fully_propagated_expr_removes_all() -> Result<()> {
         let program = compile("let x = 2 + 3; let y = x + 1; y")?;
+        assert!(program.lines.is_empty());
+        Ok(())
+    }
+
+    // ---- New: env-aware optimization removes const-folded unreferenced bindings ----
+
+    #[test]
+    fn dce_removes_unreferenced_folded_func_call() -> Result<()> {
+        let program = optimistic_compile("let c = len([1, 2]); 1")?;
+        assert!(!program.lines.iter().any(|(id, _)| id == "c"));
+        Ok(())
+    }
+
+    #[test]
+    fn dce_propagates_and_removes_folded_func_call() -> Result<()> {
+        let program = optimistic_compile("let a = [1, 2, 3]; let b = len(a); 1")?;
+        assert!(program.lines.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn dce_keeps_live_folded_func_binding() -> Result<()> {
+        let program = optimistic_compile("let used = len([1, 2, 3]); used")?;
         assert!(program.lines.is_empty());
         Ok(())
     }

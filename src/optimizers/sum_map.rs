@@ -6,7 +6,12 @@ pub fn optimize(node: &mut Node) -> bool {
     if let Node::Func { ident, args, .. } = node
         && ident == "sum"
         && args.len() == 1
-        && let Node::Func { ident: inner_ident, args: inner_args, predicate, .. } = &args[0]
+        && let Node::Func {
+            ident: inner_ident,
+            args: inner_args,
+            predicate,
+            ..
+        } = &args[0]
         && inner_ident == "map"
         && inner_args.len() == 1
     {
@@ -25,11 +30,11 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
+    use super::super::test_helpers::{num, optimize_node};
     use crate::ast::node::Node;
     use crate::ast::operator::Operator;
     use crate::ast::program::Program;
-    use super::super::test_helpers::{num, optimize_node};
+    use crate::{Context, Result, eval};
 
     #[test]
     fn sum_map_combines_predicate() -> Result<()> {
@@ -66,11 +71,19 @@ mod tests {
         };
         let optimized = optimize_node(&mut n);
         match &optimized {
-            Node::Func { ident, args, predicate, .. } => {
+            Node::Func {
+                ident,
+                args,
+                predicate,
+                ..
+            } => {
                 assert_eq!(ident, "sum");
                 assert_eq!(args.len(), 1);
                 assert!(matches!(&args[0], Node::Array(..)));
-                assert!(predicate.is_some(), "predicate should be preserved from inner map");
+                assert!(
+                    predicate.is_some(),
+                    "predicate should be preserved from inner map"
+                );
             }
             other => panic!("Expected Func node, got {other:?}"),
         }

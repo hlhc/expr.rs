@@ -6,7 +6,12 @@ pub fn optimize(node: &mut Node) -> bool {
     if let Node::Func { ident, args, .. } = node
         && ident == "len"
         && args.len() == 1
-        && let Node::Func { ident: inner_ident, args: inner_args, predicate, .. } = &args[0]
+        && let Node::Func {
+            ident: inner_ident,
+            args: inner_args,
+            predicate,
+            ..
+        } = &args[0]
         && inner_ident == "filter"
         && inner_args.len() == 1
     {
@@ -25,9 +30,9 @@ pub fn optimize(node: &mut Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Context, eval, Result};
-    use crate::ast::node::Node;
     use super::super::test_helpers::{num, optimize_node};
+    use crate::ast::node::Node;
+    use crate::{Context, Result, eval};
 
     #[test]
     fn filter_len_conversion() -> Result<()> {
